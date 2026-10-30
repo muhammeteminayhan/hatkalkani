@@ -27,7 +27,7 @@ Durum: ⬜ bekliyor · ✅ tamam
 ## Proje sırasında
 | # | İş | Neden | Nasıl | Son tarih |
 |---|---|---|---|---|
-| 9 | K1: pilot ilçeyi seçin | — | Orkestratör seçenekli soracak | 31 Eki |
+| 9 | K1: pilot ilçeyi seçin | — | ✅ 30 Eki: Menderes seçildi (ADR-006) | 31 Eki |
 | 10 | Takım bilgilerini yazın | Başvuru ve sunum | docs/pitch/EKIP.md: ad, rol, yetkinlik, danışman (şablon hazır) | 1 Kas |
 | 10a | Başvuru formunun alanlarını iletin | Taslak resmî alan adlarına ve karakter sınırlarına göre uyarlanacak; pitch-writer resmî sayfayı bulamadı | T3 KYS formundaki alan adlarını ve sınırlarını docs/pitch/FORM_ALANLARI.md'ye yazın ya da formun ekran görüntüsünü docs/pitch/ altına koyun | 1 Kas |
 | 10b | Başvuru taslağını gözden geçirin | [VARSAYIM] etiketli etki varsayımları, yapay zekâ beyanı ve "insan doğrulaması" notlu cümleler onayınızı ister | docs/BASVURU_TASLAK.md'yi okuyun; onaylamadıklarınızı not edin. Taslak 30 Eki'de düzeltildi (F1B-3). Özellikle şu varsayımlara bakın: kapsama %10 / %30 / %50, kaçınma %1 / %3 / %5 ve 2021 için verilen %20–25 hat payının 2025'e uygulanması | 1 Kas |
@@ -39,7 +39,7 @@ Durum: ⬜ bekliyor · ✅ tamam
 ## İsteğe bağlı (değeri yüksek)
 | # | İş | Neden | Nasıl |
 |---|---|---|---|
-| 15 | Bir EDAŞ'tan örnek hat verisi isteyin | OSM'de orta gerilim hatları eksik olabilir; pilot için en güçlü kanıt | Görüşmelerde isteyin; gelirse data/manual/edas/ altına koyun |
+| 15 | **(K1 kararı, öncelikli)** GDZ Elektrik'ten Menderes için örnek hat verisi isteyin | F1-1b: Menderes'te OSM'de orta gerilim (33–36 kV) hattı yok; hatların üçte ikisi iletim hattı (ADR-007). Pilot için en güçlü kanıt | Orta gerilim hatlarının GIS dosyasını (GPKG ya da SHP, gerilim alanıyla) isteyin; gelirse data/manual/edas/ altına koyun. Final öncesi gelmeyebilir |
 | 16 | EFFIS yanmış alan poligonlarını isteyin | Vaka incelemesi | EFFIS veri talep formu |
 | 17 | OGM'den il bazında yangın nedeni istatistiği isteyin | Hat kaynaklı yangın konumları | Bilgi edinme başvurusu (final öncesi gelmeyebilir) |
 | 17a | İzmir BB İtfaiyesi'nden 2025 yangın raporlarını isteyin | F1-3: Menderes, Çeşme ve Ödemiş'te hat kaynaklı olduğu yalnız basında geçiyor; birincil rapor bulunamadı | Bilgi edinme / CİMER başvurusu: 29.06.2025 Menderes, 02.07.2025 Çeşme ve Ödemiş yangınları için yangın nedeni raporu (final öncesi gelmeyebilir) |

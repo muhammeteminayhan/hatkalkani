@@ -1,13 +1,13 @@
 # Pilot bölge ve analiz dönemleri.
 # F1 sonunda orkestratör, kullanıcı onayıyla `selected` alanını doldurur (K1).
 
-selected: null            # örn. "izmir_menderes"
+selected: "izmir_menderes"  # K1, 2026-10-30, kullanıcı onayı (ADR-006)
 storage_crs: "EPSG:4326"
 metric_crs: "EPSG:32635"  # UTM 35N; İzmir için. Başka bölgede güncelle.
 
 candidates:
-  # Neden: 2025 yangınları; itfaiye raporlarına göre elektrik kaynaklı olduğu bildirildi
-  # (medya kaynaklı; F1-3'te kaynak URL'leriyle doğrulanacak).
+  # Neden: 2025 yangınları. Elektrik kaynaklı olduğu yalnızca medya ve valilik aktarımında
+  # bildirildi; resmî ya da yargısal tespit yok (F1-3, docs/reports/F1-3-vakalar.md).
   - id: izmir_menderes
     il: İzmir
     ilce: Menderes
@@ -17,7 +17,13 @@ candidates:
   - id: izmir_odemis
     il: İzmir
     ilce: Ödemiş
-  # data-scout gerekçesiyle en fazla 2 aday daha önerebilir.
+  # F1-1'in önerdiği ek adaylar (docs/reports/F1-1-aday-ilceler.md):
+  - id: izmir_seferihisar
+    il: İzmir
+    ilce: Seferihisar
+  - id: izmir_torbali
+    il: İzmir
+    ilce: Torbalı
 
 # Seçim ölçütleri (F1-1 raporunda her aday için doldurulur)
 selection_criteria:
