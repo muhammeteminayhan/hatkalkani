@@ -1,0 +1,55 @@
+# Pilot bölge ve analiz dönemleri.
+# F1 sonunda orkestratör, kullanıcı onayıyla `selected` alanını doldurur (K1).
+
+selected: null            # örn. "izmir_menderes"
+storage_crs: "EPSG:4326"
+metric_crs: "EPSG:32635"  # UTM 35N; İzmir için. Başka bölgede güncelle.
+
+candidates:
+  # Neden: 2025 yangınları; itfaiye raporlarına göre elektrik kaynaklı olduğu bildirildi
+  # (medya kaynaklı; F1-3'te kaynak URL'leriyle doğrulanacak).
+  - id: izmir_menderes
+    il: İzmir
+    ilce: Menderes
+  - id: izmir_cesme
+    il: İzmir
+    ilce: Çeşme
+  - id: izmir_odemis
+    il: İzmir
+    ilce: Ödemiş
+  # data-scout gerekçesiyle en fazla 2 aday daha önerebilir.
+
+# Seçim ölçütleri (F1-1 raporunda her aday için doldurulur)
+selection_criteria:
+  - OSM'de havai hat uzunluğu (power=line + power=minor_line, km)
+  - voltage etiketi olan hat oranı
+  - ağaç + çalı örtüsü oranı
+  - 2024–2025 yangın kaydı / belgelenmiş hat kaynaklı vaka
+  - işlem yükü (çok büyük ilçe = uzun işlem)
+
+segmentation:
+  segment_length_m: 100
+  min_last_segment_m: 50
+
+buffers_m:
+  chm_corridor_half_width: 30   # ağaç yüksekliği okunacak koridor (±)
+  dryness: 50
+  slope: 100
+  fuel: 1000
+  wui: 500
+  history_kernel: 2000
+  event_line_distance: 500
+  affected_building: 300
+
+periods:
+  backtest_asof: "2025-05-31"
+  backtest_s2_window: ["2025-04-15", "2025-05-31"]
+  backtest_season: ["2025-06-01", "2025-09-30"]
+  firms_history: ["2015-01-01", "2024-12-31"]
+  wind_climatology_summers: [2022, 2023, 2024]
+  current_window_days: 45
+
+demo:
+  # GDZ Elektrik, Haziran 2025 sonunda kuvvetli rüzgâr nedeniyle önleyici kesinti duyurdu
+  # (PITCH_FACTS #9). Rüzgâr verisine göre en uygun gün seçilir ve DECISIONS.md'ye yazılır.
+  scenario_date_candidates: ["2025-06-27", "2025-06-28", "2025-06-29", "2025-06-30"]

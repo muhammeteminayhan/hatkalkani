@@ -1,0 +1,32 @@
+# Gizli bilgiler
+.env
+.env.local
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Veri (ham ve ara ürünler git'e girmez; MANIFEST ve README'ler girer)
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/MANIFEST.csv
+data/interim/*
+!data/interim/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/manual/*
+!data/manual/README.md
+
+# Claude Code yerel dosyaları
+.claude/settings.local.json
+.claude/agent-memory-local/
+
+# Node / sistem
+node_modules/
+.playwright-mcp/
+.DS_Store
+Thumbs.db

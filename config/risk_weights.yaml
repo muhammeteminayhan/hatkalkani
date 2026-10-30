@@ -1,0 +1,51 @@
+# BAŞLANGIÇ VARSAYIMLARI. risk-modeler kalibre eder; her değişiklik docs/DECISIONS.md'ye ADR olarak yazılır.
+version: "0.1"
+
+normalization: percentile    # AOI içi yüzdelik sıra (0–1)
+combine: geometric           # geometric: 100*sqrt(P*C) | linear: 100*(0.6P+0.4C)
+
+ignition:                    # tutuşma olasılığı (P); ağırlık toplamı 1
+  vegetation_encroachment: 0.35
+  strike_trees: 0.25
+  fuel_dryness: 0.25
+  wind_exposure: 0.15
+
+consequence:                 # sonuç / yayılım (C); ağırlık toplamı 1
+  fuel_continuity: 0.40
+  wui_exposure: 0.30
+  slope: 0.20
+  fire_history: 0.10
+  asset_condition: 0.0       # pilotta şirket verisi gelince
+
+parameters:
+  # DİKKAT: Aşağıdaki bant genişlikleri YÖNETMELİK DEĞERİ DEĞİLDİR, model varsayımıdır.
+  # docs/REGULATION_NOTES.md'de doğrulanınca güncellenir ve placeholder_unverified=false yapılır.
+  clearance_band_m:
+    lv: 1.0
+    mv: 3.0
+    hv: 5.0
+  placeholder_unverified: true
+  min_encroach_canopy_m: 4.0
+  strike_margin_m: 1.0
+  strike_max_distance_m: 30
+  strike_min_cluster_px: 4
+
+tiers:                       # AOI içi yüzdelik alt sınırları
+  kritik: 0.95
+  yuksek: 0.80
+  orta: 0.50
+
+scenario:
+  gust_threshold_kmh: 50     # varsayım; duyarlılık analizi ±10 km/s
+  risk_threshold_tier: yuksek
+
+labels:                      # arayüz etiketleri
+  vegetation_encroachment: {tr: "Hatta yakın yüksek ağaç", en: "Tall vegetation near line"}
+  strike_trees: {tr: "Hatta devrilebilecek ağaç", en: "Potential strike trees"}
+  fuel_dryness: {tr: "Kuru bitki örtüsü", en: "Dry vegetation"}
+  wind_exposure: {tr: "Rüzgâra açıklık", en: "Wind exposure"}
+  fuel_continuity: {tr: "Kesintisiz orman/maki", en: "Continuous forest/shrub fuel"}
+  wui_exposure: {tr: "Yerleşime yakınlık", en: "Proximity to buildings"}
+  slope: {tr: "Dik yamaç", en: "Steep slope"}
+  fire_history: {tr: "Geçmiş yangın yoğunluğu", en: "Past fire density"}
+  asset_condition: {tr: "Tesis durumu", en: "Asset condition"}
