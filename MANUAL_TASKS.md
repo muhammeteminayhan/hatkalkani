@@ -5,7 +5,7 @@ Bu dosyada Claude'un yapamadığı veya yapmaması gereken işler var. Orkestrat
 Durum: ⬜ bekliyor · ✅ tamam
 
 ## 🔴 Öncelikli: FIRMS anahtarı ve ilk commit
-30 Eki (F0-4 ve orkestratör kontrolü, değer okunmadan): `.env` içindeki FIRMS_MAP_KEY dolu ve gerçek anahtar biçiminde (32 hex). Aynı değer `.env.example` şablonunda da vardı ve yerel ilk commit'e girdi. Şablondaki değer silindi ve ilk commit onayınızla anahtarsız yeniden yazıldı (c423a81); uzak depo yok, push yapılmadı. Ajanların `.env`'e erişimi izin kuralıyla engelli; anahtarın geçerliliği F2-5'te betikle sınanacak. İsterseniz şimdi kendiniz de bakabilirsiniz: tarayıcıda `https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/?MAP_KEY=ANAHTARINIZ` (anahtarı sohbete yazmayın).
+30 Eki (F0-4 ve orkestratör kontrolü, değer okunmadan): `.env` içindeki FIRMS_MAP_KEY dolu ve gerçek anahtar biçiminde (32 hex). Aynı değer `.env.example` şablonunda da vardı ve yerel ilk commit'e girdi. Şablondaki değer silindi ve ilk commit onayınızla anahtarsız yeniden yazıldı (c423a81); uzak depo yok, push yapılmadı. ✅ 30 Eki: Anahtar F2-5'te betikle sınandı ve geçerli çıktı; 3.180 FIRMS tespiti indirildi. Değer hiçbir yerde gösterilmedi.
 
 | # | İş | Neden | Nasıl | Son tarih | Durum |
 |---|---|---|---|---|---|
@@ -42,6 +42,7 @@ Durum: ⬜ bekliyor · ✅ tamam
 | 15 | **(K1 kararı, öncelikli)** GDZ Elektrik'ten Menderes için örnek hat verisi isteyin | F1-1b: Menderes'te OSM'de orta gerilim (33–36 kV) hattı yok; hatların üçte ikisi iletim hattı (ADR-007). Pilot için en güçlü kanıt | Orta gerilim hatlarının GIS dosyasını (GPKG ya da SHP, gerilim alanıyla) isteyin; gelirse data/manual/edas/ altına koyun. Final öncesi gelmeyebilir |
 | 16 | EFFIS yanmış alan poligonlarını isteyin | Vaka incelemesi | EFFIS veri talep formu |
 | 17 | OGM'den il bazında yangın nedeni istatistiği isteyin | Hat kaynaklı yangın konumları | Bilgi edinme başvurusu (final öncesi gelmeyebilir) |
+| 17b | (Bilgi) Web araçlarının harcama limiti | 31 Eki: WebFetch ve WebSearch aylık harcama limitine takıldı (sıfırlanma 23:40, İstanbul). Atıf doğrulaması (ATTR-1) bekliyor; başvuru son geçişi de web araması kullanabilir | Bir şey yapmanız gerekmiyor; limit sıfırlanınca yeniden denenecek. Hemen gerekirse claude.ai/settings/usage'dan limiti artırabilirsiniz |
 | 17a | İzmir BB İtfaiyesi'nden 2025 yangın raporlarını isteyin | F1-3: Menderes, Çeşme ve Ödemiş'te hat kaynaklı olduğu yalnız basında geçiyor; birincil rapor bulunamadı | Bilgi edinme / CİMER başvurusu: 29.06.2025 Menderes, 02.07.2025 Çeşme ve Ödemiş yangınları için yangın nedeni raporu (final öncesi gelmeyebilir) |
 
 ## Final

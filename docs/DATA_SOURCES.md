@@ -19,6 +19,22 @@ Durum: ⬜ kontrol edilmedi · 🔎 erişim doğrulandı · ✅ indirildi/işlen
 | 11 | Kuvvetli Akım Yönetmeliği | Açıklık mesafeleri | mevzuat.gov.tr | Kamu | ⬜ | data/manual/regulation/ | İnsan doğrular |
 | 12 | (İsteğe bağlı) EDAŞ hat GIS verisi | Gerçek şebeke | Şirketten | Sözleşmeye göre | 🙋 | data/manual/edas/ | Pilot görüşmelerinden |
 
+## Sürüm, koleksiyon ve erişim tarihi (F2, DOC-F2)
+Kaynak: `data/raw/MANIFEST.csv` ve `data/interim/izmir_menderes/*_meta.json`.
+
+| # | Veri | Sürüm / koleksiyon | Erişim tarihi | Kayıt kaynağı |
+|---|---|---|---|---|
+| 1 | OSM hat ve ilçe sınırı | Overpass API; sürüm/zaman damgası [DOĞRULANMADI] | 2026-10-30 | MANIFEST: osm_boundary, osm_power_lines |
+| 2 | Meta/WRI CHM | v2 `dinov3_global_chm_v2_ml3`; 4 karo (1221003102, 1221003103, 1221003120, 1221003121); v1 yalnızca referans | 2026-10-30 | MANIFEST: chm_v2_corridor_window; chm_meta.json |
+| 3 | Sentinel-2 L2A | `sentinel-2-c1-l2a`; backtest 2025-04-15..2025-05-31 (24 sahne), güncel 2026-09-15..2026-10-30 (21 sahne) | 2026-10-30 | MANIFEST: sentinel-2 satırları; s2_meta.json |
+| 4 | Copernicus DEM GLO-30 | `cop-dem-glo-30`; sürüm [DOĞRULANMADI] | 2026-10-30 | MANIFEST: DEM satırları |
+| 5 | ESA WorldCover | v200, 2021 | 2026-10-30 | MANIFEST: WorldCover satırı |
+| 6 | Overture binalar | release 2026-10-21.0 | 2026-10-30 | MANIFEST: overture-buildings; buildings_meta.json |
+| 7 | Open-Meteo arşiv | archive-api; sürüm yok; 2022–2025 yaz pencereleri | 2026-10-30 | MANIFEST: open-meteo satırları |
+| 8 | NASA FIRMS | VIIRS_SNPP_SP, VIIRS_NOAA20_SP, MODIS_SP; yıllar 2015–2025 | 2026-10-30 | MANIFEST: firms satırları |
+
+Risk: MANIFEST'teki FIRMS URL'lerinde MAP_KEY `***` ve kaynak `VIIRS_SNPP_SP|NRT` gösterimi var; tarih parametresi kısaltılmış görünüyor. [DOĞRULANMADI]
+
 ## F2-1 notu (ingest)
 - OSM hat ve ilçe sınırı (Overpass, overpass-api.de; kumi.systems yedek, erişilemedi): ODbL 1.0. Ham yanıtlar `data/raw/izmir_menderes/`, kayıtlar `data/raw/MANIFEST.csv`. Çıktılar `data/processed/izmir_menderes/{boundary,lines,segments}.parquet`.
 - EDAŞ dosyası (GPKG/SHP) `data/manual/edas/` altına konursa OSM yerine kullanılır; beklenen sütunlar: kimlik (id/hat_id/objectid), gerilim (kV ya da V; sütun adı gerilim/voltage/kv), çizgi geometri, tanımlı CRS.

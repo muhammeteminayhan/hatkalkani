@@ -18,12 +18,13 @@ Etiketler:
 ## 1. Ağaç yüksekliği: Meta & WRI Canopy Height Maps
 - **v1 [D]:**
   - Konum: `s3://dataforgood-fb-data/forests/v1/alsgedi_global_v6_float/`. Anonim erişim; AWS hesabı gerekmez.
-  - Karo dizini: `tiles.geojson`. `tile` alanı quadkey; gözlem tarihi bilgisi de var.
+  - Karo dizini: `tiles.geojson`. `tile` alanı quadkey. Görüntü tarihi (acq_date) tiles.geojson'dan değil, karo metadata dosyalarından okunur; bazı metadata dosyaları 49–63 MB, yalnızca gerekenleri indir. [Düzeltme DOC-F2; canlı erişimde DOĞRULANMADI]
   - Karo dosyası: `chm/<tile>.tif`.
   - HTTPS: `https://dataforgood-fb-data.s3.amazonaws.com/forests/v1/alsgedi_global_v6_float/chm/<tile>.tif`
 - **v2 [K]:**
   - Konum: `s3://dataforgood-fb-data/forests/v2/global/dinov3_global_chm_v2_ml3/` (DINOv3 ile iyileştirilmiş sürüm).
   - Yapıyı `aws s3 ls --no-sign-request` veya `s3fs.S3FileSystem(anon=True)` ile keşfet.
+  - Karo listesi için `chm/` dizin listesini kullan; v2 için `tiles.geojson` (≈58,9 MB) kullanma. v2 karolarında görüntü tarihi yok (`unknown`). [Düzeltme DOC-F2; DOĞRULANMADI]
   - Source Cooperative'de GeoParquet karo dizini ve STAC ile yeniden paketlenmiş bir kopyası var (`tge-labs/meta-chm-v2`).
   - v2'ye erişim 30 dakikada çözülemezse v1'i kullan ve bunu DECISIONS.md'ye yaz.
 - **Lisans:** CC BY 4.0, ticari kullanım serbest.
@@ -88,11 +89,11 @@ Etiketler:
 - **Lisans:** CC BY 4.0. **Atıf:** "Weather data by Open-Meteo.com".
 
 ## 9. Aktif yangın noktaları: NASA FIRMS [D]
-- **API:** `https://firms.modaps.eosdis.nasa.gov/api/area/csv/<MAP_KEY>/<SOURCE>/<batı,güney,doğu,kuzey>/<GÜN 1-10>/<YYYY-MM-DD>`
+- **API:** `https://firms.modaps.eosdis.nasa.gov/api/area/csv/<MAP_KEY>/<SOURCE>/<batı,güney,doğu,kuzey>/<GÜN 1-5>/<YYYY-MM-DD>`
 - **SOURCE:**
   - Arşiv: `VIIRS_SNPP_SP`, `VIIRS_NOAA20_SP`, `MODIS_SP`
   - Yakın gerçek zamanlı: `*_NRT`
-- **Gün aralığı:** Tek istekte en fazla 10 gün; tarihleri 10'ar günlük dilimlerle döngüle.
+- **Gün aralığı:** Tek istekte en fazla 5 gün kabul ediliyor (10 değil); tarihleri 5'er günlük dilimlerle döngüle. [Düzeltme DOC-F2; canlı API'de DOĞRULANMADI]
 - **Sınır:** 10 dakikada 5000 işlem. Hangi tarihlerin mevcut olduğunu `/api/data_availability/` gösterir.
 - **Anahtar:** MAP_KEY, `FIRMS_MAP_KEY` ortam değişkeninden (.env) okunur. Yoksa DUR ve KULLANICIDAN GEREKEN yaz.
 - **Not:** FIRMS ateş PİKSELİ verir (VIIRS ~375 m). Bu, tutuşma noktası değildir.

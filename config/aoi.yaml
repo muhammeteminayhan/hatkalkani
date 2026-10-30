@@ -54,6 +54,7 @@ periods:
   firms_history: ["2015-01-01", "2024-12-31"]
   wind_climatology_summers: [2022, 2023, 2024]
   current_window_days: 45
+  current_asof: "2026-10-30"   # güncel pencerenin bitişi; demo tekrarlanabilirliği için sabit (boşsa bugün)
 
 demo:
   # GDZ Elektrik, Haziran 2025 sonunda kuvvetli rüzgâr nedeniyle önleyici kesinti duyurdu

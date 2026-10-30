@@ -54,3 +54,8 @@ Sonuçlar / ödünleşimler: …
 - **Bağlam:** OSM'de orta gerilim dağıtım hattı neredeyse yok. 33–36 kV etiketli hat yalnızca Torbalı'da var (4 km), Menderes'te hiç yok. Müşteri ise EDAŞ.
 - **Karar:** Pilot, OSM havai hatlarıyla (power=line, minor_line) kurulur; her hat kaynağı ve gerilim sınıfıyla etiketlenir. Ingest, EDAŞ'ın GIS dosyasını (data/manual/edas/) aynı şemayla kabul eder ve dosya varsa onu kullanır. GDZ Elektrik'ten örnek veri istenir (MANUAL_TASKS 15).
 - **Sonuçlar:** Demoda haritanın hangi hatları gösterdiği açıkça yazılır ("OSM: çoğu iletim hattı"). Yöntem şebekeden bağımsız anlatılır; dağıtım şebekesi için sonuç iddia edilmez.
+
+## ADR-008 — Ağaç yüksekliği kaynağı: CHM v2  (2026-10-30, data-engineer önerisi, orkestratör onayı — F2-3)
+- **Bağlam:** CHM v1 karoları şerit bloklu (65536×1); bu yüzden ±30 m koridoru okumak çok veri çekiyor. v2 karoları 512 px döşemeli COG ve model daha yeni.
+- **Karar:** Koridor istatistikleri v2'den (`dinov3_global_chm_v2_ml3`) çıkarılır: 4 karo, ≈8 MB pencereli okuma.
+- **Ödünleşimler:** v2'de görüntü tarihi yok. v1 tarihleri (Menderes için 2016-07-22..2020-02-19) yalnızca referans. MODEL_CARD'a "CHM taban yılı bilinmiyor" yazılır. Piksel değerinin uint8 metre olduğu varsayımı F2 incelemesinde doğrulanır.

@@ -83,6 +83,18 @@ def read_manifest(root: Path = ROOT) -> list[dict[str, str]]:
         return list(csv.DictReader(fh))
 
 
+def manifest_remove(yerel_yol: str, root: Path = ROOT) -> None:
+    """Drop the row keyed by `yerel_yol` (no-op when absent)."""
+    rows = read_manifest(root)
+    kept = [r for r in rows if r["yerel_yol"] != yerel_yol]
+    if len(kept) == len(rows):
+        return
+    with manifest_path(root).open("w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=MANIFEST_COLUMNS)
+        w.writeheader()
+        w.writerows(kept)
+
+
 def manifest_upsert(row: dict[str, str], root: Path = ROOT) -> None:
     """Insert or replace the row keyed by `yerel_yol`."""
     rows = [r for r in read_manifest(root) if r["yerel_yol"] != row["yerel_yol"]]
