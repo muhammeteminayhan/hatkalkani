@@ -18,3 +18,7 @@ Durum: ⬜ kontrol edilmedi · 🔎 erişim doğrulandı · ✅ indirildi/işlen
 | 10 | Haber vakaları | Vaka incelemesi | Web | — | ⬜ | docs/reports/F1-3-vakalar.md | Medya kaynaklı, doğrulanmadı |
 | 11 | Kuvvetli Akım Yönetmeliği | Açıklık mesafeleri | mevzuat.gov.tr | Kamu | ⬜ | data/manual/regulation/ | İnsan doğrular |
 | 12 | (İsteğe bağlı) EDAŞ hat GIS verisi | Gerçek şebeke | Şirketten | Sözleşmeye göre | 🙋 | data/manual/edas/ | Pilot görüşmelerinden |
+
+## F2-1 notu (ingest)
+- OSM hat ve ilçe sınırı (Overpass, overpass-api.de; kumi.systems yedek, erişilemedi): ODbL 1.0. Ham yanıtlar `data/raw/izmir_menderes/`, kayıtlar `data/raw/MANIFEST.csv`. Çıktılar `data/processed/izmir_menderes/{boundary,lines,segments}.parquet`.
+- EDAŞ dosyası (GPKG/SHP) `data/manual/edas/` altına konursa OSM yerine kullanılır; beklenen sütunlar: kimlik (id/hat_id/objectid), gerilim (kV ya da V; sütun adı gerilim/voltage/kv), çizgi geometri, tanımlı CRS.
