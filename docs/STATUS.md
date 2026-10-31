@@ -2,7 +2,7 @@
 
 Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonra ilk okunacak dosya budur.
 
-**Son güncelleme:** 2026-10-31 18:18 — **K2 ✅ kullanıcı onayladı:** risk modeli v0.1 bu sonuçlarla kabul edildi, çok yıllı backtest eklenmedi (ADR-014, FIX-F3 bitince yazılacak). FIX-F4A, FIX-F4W, ATTR-1b ve DOC-ATTR bitti; FIX-F3 sürüyor. Sırada F4W-2 (Doğrulama sekmesi yeni alanlarla), son QA, commit ve K3. Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
+**Son güncelleme:** 2026-10-31 19:16 — **Prototip hazır.** F3 ✅ (K2 onaylı, ADR-014). F4 düzeltmeleri commit'lendi (1ff143c) ve temiz klon testi geçti (qa-F4-final). Kullanıcıya toplantı tanıtım metni ve çalıştırma kılavuzu verildi. Sırada K3 (kullanıcı toplantıda ekranını paylaşıp demoyu gösterecek) ve başvuru taslağının son geçişi (son tarih 2 Kas 23:59). Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
 
 ## Fazlar
 | Faz | Durum | Not |
@@ -11,8 +11,8 @@ Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonr
 | F1 Veri keşfi + pilot seçimi | ✅ | K1 ✅ Menderes (ADR-006, ADR-007) · QA-F1 ✅ (duman testi, ruff, önbellekten aynı CSV'ler) · F1 commit'i atıldı · code-reviewer F1'de atlandı: yalnızca keşif betiği var, tam inceleme F2 sonunda |
 | F1B Başvuru taslağı | 🔄 | F1B-1 ✅ taslak · F1B-2 ✅ kaynak düzeltmeleri · F1B-3 ✅ taslak düzeltmesi · son geçiş 1–2 Kas (pilot ilçe, ekip, form alanları) · başvuru son tarihi 2 Kas 23:59 |
 | F2 Veri hattı | ✅ | F2-1…F2-6, DOC-F2 ✅ · QA-F2 ✅ · REV-F2: Kritik 0, Yüksek 3 → FIX-F2 ✅ · commit'lendi · açık: ATTR-1 (web limiti), backlog'da 10 Orta ve 15 Düşük bulgu |
-| F3 Risk modeli | 🔄 | F3-1 … F3-4 ✅ (abe3ebb) · REV-F3F4 ✅ · FIX-F3 sürüyor · **K2 ✅ 31 Eki:** kullanıcı v0.1'i bu sonuçlarla onayladı (backtest bilgi vermiyor: hat yakınında n = 2; çok yıllı test eklenmedi) |
-| F4 API + arayüz | 🔄 | F4-1 (a/b/c) ✅ · F4-2 (a/b/c) ✅: dört sekme gerçek veriyle · F4-3 QA ve REV-F3F4 sürüyor · K3: demo provası |
+| F3 Risk modeli | ✅ | F3-1 … F3-4 ✅ (abe3ebb) · REV-F3F4 ✅ · FIX-F3 ✅ (1ff143c) · **K2 ✅ 31 Eki:** kullanıcı v0.1'i bu sonuçlarla onayladı (backtest bilgi vermiyor: hat yakınında n = 2; çok yıllı test eklenmedi) |
+| F4 API + arayüz | 🔄 | F4-1 (a/b/c) ✅ · F4-2 (a/b/c) ✅ · F4-3 QA ✅ · FIX-F4A/F4W ve F4W-2 ✅ (1ff143c) · QA-CLONE ✅ (temiz klon) · K3: kullanıcı toplantıda ekran paylaşarak demoyu gösterecek |
 | F5 Demo cilası + sunum | ⬜ | |
 | F6 Final | ⬜ | 15–16 Kas |
 
@@ -21,14 +21,15 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 ## Aktif görevler
 | ID | Ajan | Durum | Sahip olduğu dosyalar | Rapor |
 |---|---|---|---|---|
-| PF-MODEL | doc-writer (Haiku 5.5) | 🔄 PITCH_FACTS "Model sonuçları" bölümü çıktılardan, dosya yolu kaynaklı | docs/PITCH_FACTS.md | handoff |
-| QA-CLONE | qa-tester (Haiku 5.5) | ⬜ Commit sonrası temiz klonda ruff, pytest, pipeline (features→backtest), sunucu ve arayüz duman testi | docs/reports/qa-F4-final.md, scratchpad'deki klon | handoff |
 | — | (sahipsiz, kimse değiştirmiyor) | — | src/, tests/, web/, scripts/, config/sources.yaml, config/risk_weights.yaml | — |
 | — | orkestratör | sürekli | docs/STATUS.md, MANUAL_TASKS.md, docs/DECISIONS.md, docs/PLAN.md, config/aoi.yaml, .env.example | — |
 
 ## Biten görevler
 | ID | Ajan | Sonuç | Rapor |
 |---|---|---|---|
+| QA-CLONE | qa-tester (Haiku 5.5) | 1ff143c temiz klonda geçti, kırmızı adım yok. `uv sync` 6 sn; ruff temiz; pytest 233 geçti, 2 seçilmedi (39 sn). Pipeline features→backtest çıkış kodu 0. backtest.json ve scenario sha256 aynı; iki risk parquet'i bayt olarak farklı, içerik (pyarrow) aynı. Sunucuda 15 istek 200 döndü. Playwright 1920×1080: 4 sekme TR/EN konsol temiz, ilk yükleme 159 ms, kaydırıcı tabloyu değiştiriyor, "Bilgi vermiyor" görünüyor. Çevrimdışı mod bu turda denenmedi (F4-3'te geçmişti). Klon scratchpad'de duruyor; silmek kullanıcı onayı ister | docs/reports/qa-F4-final.md |
+| COMMIT | orkestratör | 1ff143c: FIX-F3, FIX-F4A, FIX-F4W, F4W-2, ATTR-1b, DOC-ATTR, PF-MODEL, ORK düzeltmeleri, ADR-014 (62 dosya) | — |
+| PF-MODEL | doc-writer (Haiku 5.5) | PITCH_FACTS "Model sonuçları" #26–#41 eklendi; her satırda dosya yolu ve alan var. #27 (≥154 kV 61,0 km) orkestratör sayımıyla doğrulandı: `risk_2026-10-30.parquet → voltage_class`, ge154kv 60,99 km, etiketsiz 31,45 km. README'deki yanlış "ADR-007" atfı düzeltildi | handoff |
 | ORK-2 | orkestratör | K2 kaydı (STATUS, MANUAL_TASKS #13, ADR-014). `web/i18n.js` senaryo etiketi TR "km/h" → "km/sa". `config/risk_weights.yaml:42` yorumu yumuşatıldı (REV D2: "bağımsız ön kayıt değil") | — |
 | F4W-2 | frontend-dev (Sonnet 5.5) | Doğrulama sekmesi canlı API'de doğrulandı: verdict gerekçesi TR ve EN görünüyor, sızıntı katmanları ve notu listeleniyor, `ci95` null için "dejenere (anlamsız)" yazıyor. DEM atfı altbilgide ve Hakkında'da yeni metinle çıkıyor. Mock'lar canlı API'den yenilendi; 09 ve 10 1920×1080 yeniden çekildi. `node --check` temiz; Playwright'ta 4 sekme ve `?mock=1` konsol temiz | handoff |
 | FIX-F3 | risk-modeler (Opus 5.5) | `check_no_leakage` as_of sonrası statik katmanları listeliyor (buildings Overture 2026-10-21.0; lines ve boundary OSM 2026-10-30). backtest.json'a `verdict` (informative false; en az 38 olay gerekir: tek yönlü kesin binom, α 0,05, üst %20'de lift 2, güç ≥%80), `leakage` ve `ci95_note` eklendi; `ci95` dejenere olduğunda null. MODEL_CARD güncellendi: sızıntı beyanı, CHM 2016-07-22…2020-02-18, seçim yanlılığı, yumuşatılmış kayıt ifadesi. ADR-013'e ek not yazıldı. ruff temiz; tests/model 83, tüm paket 233 geçti; risk parquet sha256 değişmedi. Ağ hatasıyla (ENOTFOUND) bir kez kesildi, devam ettirildi | docs/reports/FIX-F3-backtest-duzeltme.md |
@@ -83,6 +84,14 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 - yok (30 Eki: `.env.example`'daki gerçek biçimli FIRMS anahtarı şablondan silindi; ilk commit kullanıcı onayıyla `--amend` ile yeniden yazıldı: 87d9e3b → c423a81)
 
 ## İzlenecekler
+- **Backlog (31 Eki, F3/F4 sonrası):**
+  - Risk parquet bayt düzeyinde deterministik değil; içerik aynı (QA-CLONE).
+  - Çevrimdışı akış FIX turundan sonra yeniden denenmedi.
+  - `window.__hk.map` hata ayıklama kancası duruyor.
+  - REV-F3F4 Düşük bulguları D1, D4, D10 açık.
+  - `data/interim/.../chm_meta.json` eski metni taşıyor (`--force` ile yenilenir).
+  - `.gitattributes` yok (LF/CRLF uyarıları).
+  - Scratchpad'deki temiz klon (≈1 GB) duruyor; silmek onay ister.
 - **Çevrimdışı demo notu (REV-F3F4 D9):** `firms.py`'deki `NRT_TTL_DAYS = 14` yüzünden yaklaşık 13 Kasım'dan sonra `--stage ingest` ve `--stage all` ağ bağlantısı ile `FIRMS_MAP_KEY` ister. Demo ve final için `score`, `scenario` ve `backtest` aşamaları ile `serve.py` yeterlidir ve ağ gerektirmez. Finalden önce ingest'i yeniden çalıştırmayın ya da önce bağlantıyı kontrol edin.
 - F4-2 ilk tur (31 Eki): 4 sekme, detay çekmecesi, TR/EN ve çevrimdışı yedek çalışıyor. MapLibre 4.7.1 yerel; altlık OpenFreeMap positron. Açılış 182 ms; JS hatası yok; ekran görüntüleri docs/screens/01–06. Senaryo, doğrulama ve olay sekmeleri yalnız mock ile denendi; gerçek veriyle F3-34'ten sonra denenecek. Orkestratörün gözle kontrolünden düzeltilecekler: (1) "Bu haftanın iş paketi" sayaç etiketi yanıltıcı, sayı toplam açıklık sayısı; (2) "Devrilebilecek ağaç: 93" kesin gibi okunuyor, tahmini ağaç kümesi olduğu belirtilmeli.
 - F3-1 bulguları: wind_exposure ≈ TPI (ρ 0,98; yineleme F3-2'de ele alınacak); strike kümelerinin %34'ü 4 m'nin altında; fuel_dryness bahar–sonbahar ρ 0,51; encroachment değerlerinin %47'si sıfır; bant genişlikleri ±%20 değişince ρ ≥ 0,99 (sağlam). FIRMS 2025-09-30'da bittiği için güncel haritada 395 günlük boşluk vardı → F2-5b.
