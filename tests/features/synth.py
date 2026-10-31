@@ -81,6 +81,10 @@ RISK_YAML = {
         "strike_min_cluster_px": 4,
     },
     "tiers": {"kritik": 0.95, "yuksek": 0.80, "orta": 0.50},  # used by the model tests
+    "scenario": {"gust_threshold_kmh": 50, "risk_threshold_tier": "yuksek"},
+    "backtest": {"cluster_distance_m": 1000, "cluster_gap_days": 2, "top_shares": [0.1, 0.2],
+                 "bootstrap_n": 500, "bootstrap_seed": 7,
+                 "sensitivity_line_distance_m": [1000, 2000]},
 }
 
 SEGMENTS = {  # segment_id: (line_id, level, x0, x1, y)

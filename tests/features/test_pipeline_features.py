@@ -44,12 +44,14 @@ def test_main_dispatches_stages(monkeypatch):
     monkeypatch.setattr(rp, "run_ingest", lambda *a, **k: seen.append("ingest") or [])
     monkeypatch.setattr(rp, "run_features", lambda *a, **k: seen.append("features") or [])
     monkeypatch.setattr(rp, "run_score", lambda *a, **k: seen.append("score") or [])
+    monkeypatch.setattr(rp, "run_scenario", lambda *a, **k: seen.append("scenario") or [])
+    monkeypatch.setattr(rp, "run_backtest", lambda *a, **k: seen.append("backtest") or [])
     monkeypatch.setattr(rp, "_check_manifest", lambda: seen.append("manifest"))
     rp.main(["--aoi", AOI, "--stage", "features"])
     assert seen == ["features"]
     seen.clear()
     rp.main(["--aoi", AOI, "--stage", "all"])
-    assert seen == ["ingest", "manifest", "features", "score"]
+    assert seen == ["ingest", "manifest", "features", "score", "scenario", "backtest"]
     seen.clear()
     rp.main(["--aoi", AOI])  # default stays ingest-only
     assert seen == ["ingest", "manifest"]

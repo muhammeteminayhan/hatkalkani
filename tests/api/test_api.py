@@ -24,7 +24,7 @@ LABELS = {
 }
 
 
-def _write_asof(d: Path, as_of: str) -> None:
+def _write_asof(d: Path, as_of: str, chm: bool = False) -> None:
     rows = [("1_0001", "kritik", 0.0), ("1_0002", "dusuk", 0.01), ("2_0001", "orta", 0.5)]
     feats, recs, frecs = [], [], []
     for i, (sid, tier, x) in enumerate(rows):
@@ -45,6 +45,10 @@ def _write_asof(d: Path, as_of: str) -> None:
         frecs.append({"segment_id": sid, "fuel_continuity": 0.91, "slope": 12.5})
     (d / f"risk_{as_of}.geojson").write_text(
         json.dumps({"type": "FeatureCollection", "features": feats}), encoding="utf-8")
+    if chm:
+        for k, rec in enumerate(recs):
+            rec.update(chm_year=2019, chm_acq_min=f"2018-0{k + 1}-01",
+                       chm_acq_max=f"2020-0{k + 1}-15", chm_acq_dominant="2019-07-01")
     pd.DataFrame(recs).to_parquet(d / f"risk_{as_of}.parquet")
     pd.DataFrame(frecs).to_parquet(d / f"features_{as_of}.parquet")
     (d / f"risk_{as_of}.meta.json").write_text(json.dumps({"labels": LABELS}), encoding="utf-8")
@@ -59,12 +63,13 @@ def _write_asof(d: Path, as_of: str) -> None:
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
+def client(tmp_path: Path, request: pytest.FixtureRequest) -> TestClient:
+    chm = getattr(request, "param", False)
     root = tmp_path / "processed"
     d = root / AOI
     d.mkdir(parents=True)
     for as_of in ("2025-05-31", "2026-10-30"):
-        _write_asof(d, as_of)
+        _write_asof(d, as_of, chm=chm and as_of == "2026-10-30")
     gpd.GeoDataFrame({"il": ["Test"], "ilce": ["Sentetik"]}, geometry=[box(26.9, 37.9, 27.6, 38.1)],
                      crs="EPSG:4326").to_parquet(d / "boundary.parquet")
     cfg = tmp_path / "config"
@@ -185,3 +190,43 @@ def test_real_data_smoke() -> None:
     assert r.status_code == 200 and time.perf_counter() - t < 0.5
     assert len(r.json()["features"]) == 46
     assert c.get("/api/workorders/export?format=csv").content.startswith(b"\xef\xbb\xbf")
+
+
+@pytest.mark.parametrize("client", [True], indirect=True)
+def test_chm_dates_present(client: TestClient) -> None:
+    j = client.get("/api/segments/1_0001").json()
+    assert j["chm_year"] == 2019 and j["chm_acq_dominant"] == "2019-07-01"
+    assert j["chm_year_note_tr"] == (
+        "Ağaç yüksekliği görüntü tarihi: 2019-07-01 "
+        "(bu parçada 2018-01-01–2020-01-15; Meta/WRI CHM v2 mozaiği)")
+    assert "Tree-height imagery date: 2019-07-01" in j["chm_year_note_en"]
+    assert client.get("/api/aoi").json()["stats"]["chm_acq_range"] == ["2018-01-01", "2020-03-15"]
+
+
+def test_chm_dates_absent(client: TestClient) -> None:
+    j = client.get("/api/segments/1_0001").json()
+    assert j["chm_acq_dominant"] is None and "ADR-008" in j["chm_year_note_tr"]
+    assert client.get("/api/aoi").json()["stats"]["chm_acq_range"] is None
+
+
+@pytest.mark.skipif(
+    not (REAL / "scenario_dates.json").exists(), reason="real scenario data absent"
+)
+def test_real_scenario_smoke() -> None:
+    c = TestClient(create_app())
+    dates = c.get("/api/scenario/dates")
+    assert dates.status_code == 200
+    assert "2025-06-29" in [x["date"] for x in dates.json()]
+    r = c.get("/api/scenario?date=2025-06-29&gust_kmh=50&min_tier=yuksek")
+    assert r.status_code == 200
+    j = r.json()
+    assert j["targeted"]["line_km"] <= j["district_wide"]["line_km"]
+    assert "sensitivity_segment_unit" in j
+    if not (REAL / "backtest.json").exists():
+        assert c.get("/api/backtest").status_code == 503
+
+
+def test_warmup_failure_does_not_crash(client: TestClient, tmp_path: Path) -> None:
+    (tmp_path / "processed" / AOI / "scenario_dates.json").write_text("not json")
+    c = TestClient(create_app(tmp_path / "processed", config_dir=tmp_path / "config"))
+    assert c.get("/api/health").status_code == 200

@@ -468,39 +468,33 @@
   function initScenarioForm() {
     const dates = state.dates;
     $("sc-date").innerHTML = dates.map((d) => '<option value="' + esc(d.date) + '">' + esc(d.date) + "</option>").join("");
-    const maxAll = Math.max.apply(null, dates.map((d) => d.max_gust_kmh));
+    const maxAll = Math.max.apply(null, dates.map((d) => d.max_gust_kmh_grid || d.max_gust_kmh));
     const g = $("sc-gust");
     g.min = 0; g.max = Math.ceil(maxAll);
     $("sc-tier").innerHTML = TIERS.slice(0, 3).map((k) => '<option value="' + k + '">' + esc(tierName(k)) + "</option>").join("");
     $("sc-tier").value = "yuksek";
-    setGustFromDate();
+    const sel = dates.find((d) => d.selected) || dates[0];
+    $("sc-date").value = sel.date;
+    updateGustLabels();
     $("sc-form").hidden = false;
   }
   function selectedDate() { return (state.dates || []).find((d) => d.date === $("sc-date").value); }
-  function setGustFromDate() {
-    const d = selectedDate();
-    if (d) $("sc-gust").value = Math.floor(d.max_gust_kmh);
-    updateGustLabels();
-  }
-  function updateGustLabels() {
-    const d = selectedDate();
-    $("sc-gust-out").textContent = fmt($("sc-gust").value, 0);
-    $("sc-maxgust").textContent = d ? fmt(d.max_gust_kmh, 1) + " km/h · " + t("sc_max_gust") : "";
-  }
-  let scTimer = null, scTok = 0;
+  function updateGustLabels() { $("sc-gust-out").textContent = fmt($("sc-gust").value, 0); }
+  let scTimer = null, scTok = 0, scTouched = false;
   function scheduleScenario() { clearTimeout(scTimer); scTimer = setTimeout(runScenario, 250); }
-  $("sc-date").addEventListener("change", () => { setGustFromDate(); runScenario(); });
-  $("sc-gust").addEventListener("input", () => { updateGustLabels(); scheduleScenario(); });
+  $("sc-date").addEventListener("change", runScenario);
+  $("sc-gust").addEventListener("input", () => { scTouched = true; updateGustLabels(); scheduleScenario(); });
   $("sc-tier").addEventListener("change", runScenario);
   async function runScenario() {
     if (!state.dates) return;
     const tok = ++scTok;
-    const q = { date: $("sc-date").value, gust_kmh: $("sc-gust").value, min_tier: $("sc-tier").value };
+    const q = { date: $("sc-date").value, gust_kmh: scTouched ? $("sc-gust").value : undefined, min_tier: $("sc-tier").value };
     $("sc-result").setAttribute("aria-busy", "true");
     try {
       const r = await api("/api/scenario", q);
       if (tok !== scTok) return;
       state.scenario = r; state.scenarioErr = null;
+      if (!scTouched && r.inputs && r.inputs.gust_kmh !== undefined) { $("sc-gust").value = r.inputs.gust_kmh; updateGustLabels(); }
       $("sc-status").textContent = "";
       await mapReady;
       setSource("scenario", r.segments);
@@ -516,19 +510,30 @@
   function renderScenario() {
     const r = state.scenario;
     if (!r) return;
-    const dw = r.district_wide, tg = r.targeted;
-    const card = (cls, title, o, extra) => '<div class="card ' + cls + '"><h3>' + esc(title) + "</h3>" +
-      '<div class="row"><span>' + esc(t("sc_line_km")) + "</span><b>" + fmt(o.line_km, 1) + " " + t("unit_km") + "</b></div>" +
-      '<div class="row"><span>' + esc(t("sc_buildings")) + "</span><b>" + fmt(o.buildings, 0) + "</b></div>" + (extra || "") + "</div>";
-    let html = '<div class="cmp">' + card("", t("sc_district"), dw) +
-      card("targeted", t("sc_targeted"), tg, '<div class="row"><span>' + esc(t("sc_covered")) + "</span><b>" + pct(tg.risk_covered_ratio, 0) + "</b></div>") + "</div>";
+    const dw = r.district_wide, tg = r.targeted, sn = r.sensitivity_segment_unit;
+    const row = (label, val) => '<div class="row"><span>' + esc(label) + "</span><b>" + val + "</b></div>";
+    const card = (cls, title, o, share, covered) => '<div class="card ' + cls + '"><h3>' + esc(title) + "</h3>" +
+      row(t("sc_line_km"), fmt(o.line_km, 1) + " " + t("unit_km")) + row(t("sc_buildings"), fmt(o.buildings, 0)) +
+      (covered !== undefined ? row(t("sc_covered"), pct(covered, 0)) : "") + "</div>";
+    let html = '<p class="small">' + esc(t("sc_asof_used", { d: asOfMonth(r.inputs && r.inputs.as_of_used) })) + "</p>";
+    html += '<div class="cmp">' + card("", t("sc_district"), dw) + card("targeted", t("sc_targeted"), tg, null, tg.risk_covered_ratio) + "</div>";
     html += '<table class="result-table"><tbody><tr><th>' + esc(t("sc_saved_km")) + '</th><td class="n">' + fmt(dw.line_km - tg.line_km, 1) + " " + t("unit_km") + "</td></tr>" +
       "<tr><th>" + esc(t("sc_saved_b")) + '</th><td class="n">' + fmt(dw.buildings - tg.buildings, 0) + "</td></tr></tbody></table>";
+    if (sn) {
+      html += '<h3>' + esc(t("sc_sens_title")) + '</h3><div class="card sens"><p class="small"><strong>' + esc(pick(sn, "label")) + "</strong></p>" +
+        row(t("sc_line_km"), fmt(sn.line_km, 1) + " " + t("unit_km")) + row(t("sc_buildings"), fmt(sn.buildings, 0)) + row(t("sc_covered"), pct(sn.risk_covered_ratio, 0)) +
+        '<p class="small">' + esc(t("sc_sens_note")) + "</p></div>";
+    }
     html += '<div class="callout">' + esc(t("sc_proxy")) + "</div>";
     html += '<p class="small">' + esc(t("sc_on_map")) + "</p>";
     const note = pick(r, "note");
     if (note) html += '<p class="small"><strong>' + esc(t("sc_note")) + ":</strong> " + esc(note) + "</p>";
     $("sc-result").innerHTML = html;
+  }
+  function asOfMonth(d) {
+    if (!d) return t("no_data");
+    const dt = new Date(d + "T00:00:00Z");
+    return isNaN(dt) ? d : new Intl.DateTimeFormat(locale(), { month: "long", year: "numeric", timeZone: "UTC" }).format(dt);
   }
 
   /* ---------- Validation ---------- */

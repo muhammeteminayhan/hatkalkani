@@ -54,6 +54,9 @@ Tüm yanıtlar JSON (UTF-8) ve koordinatlar EPSG:4326'dır. Sözleşme değişik
   - `segments/{id}`, Feature ile birlikte aynı anahtarları üst düzeyde de döner. Ek alanlar: `chm_year_note_tr/en`, `norm`, `factor_labels`.
   - `workorders?format=json` bir dizi döner; toplam sayı `X-Total-Count` başlığındadır. `segment_ids` `;` ile ayrılmış metindir.
   - Yeni `GET /api/meta/factors`.
+  - F4-1b ekleri:
+    - `segments/{id}` yanıtında `chm_year`, `chm_acq_min`, `chm_acq_max` ve `chm_acq_dominant` var. Bunlar CHM v2 görüntü tarihleridir; alan yoksa değer null olur.
+    - `aoi.stats` yanıtında `chm_acq_range:[min,max]` var.
   - Diğer hatalar `{"error","hint"}` biçimindedir.
 
 ## Arayüz düzeni

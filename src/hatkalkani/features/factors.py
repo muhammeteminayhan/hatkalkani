@@ -287,8 +287,8 @@ def segment_tpi(ctx: FeatureContext) -> tuple[np.ndarray, np.ndarray]:
     ),
     temporal="time_filtered",
     direction="higher",
-    label_tr="Rüzgâra açıklık",
-    label_en="Wind exposure",
+    label_tr="Rüzgâra topoğrafik açıklık",  # ≈ TPI (F3-1); renamed in F3-34
+    label_en="Topographic wind exposure",
     definition=(
         "En yakın Open-Meteo hücresinin saatlik hamle 95. yüzdeliği × (0,5 + segment TPI'sinin "
         "AOI TPI dağılımındaki yüzdeliği), çarpan 0,5-1,5"
@@ -481,7 +481,9 @@ def wui_exposure(ctx: FeatureContext, *, as_of: AsOf) -> FactorResult:
     label_en="Past fire density",
     definition=(
         "(yerel gün, 375 m hücre) başına tekilleştirilmiş VIIRS tespitlerinin, segment orta "
-        "noktasında buffers_m.history_kernel bant genişlikli quartic çekirdek yoğunluğu"
+        "noktasında buffers_m.history_kernel bant genişlikli quartic çekirdek yoğunluğu. "
+        "FIRMS type 0 (bitki örtüsü) ve type'ı boş NRT satırları sayılır; 2 (statik kara "
+        "kaynağı) ve 3 (deniz) dışlanır (ADR-013)"
     ),
 )
 def fire_history(ctx: FeatureContext, *, as_of: AsOf) -> FactorResult:

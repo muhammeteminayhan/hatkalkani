@@ -16,7 +16,7 @@ sys.modules["run_pipeline"] = rp
 spec.loader.exec_module(rp)
 
 ORDER = ["boundary", "lines", "segments", "sentinel2", "dem", "worldcover",
-         "chm", "buildings", "firms", "weather"]
+         "chm", "chm_dates", "buildings", "firms", "weather"]
 
 
 def _name(cmd: list[str]) -> str:

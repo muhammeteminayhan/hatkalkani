@@ -39,11 +39,19 @@ scenario:
   gust_threshold_kmh: 50     # varsayım; duyarlılık analizi ±10 km/s
   risk_threshold_tier: yuksek
 
+backtest:                    # F3-3 geriye dönük test (ADR-013); sonuç görülmeden önce kaydedildi
+  cluster_distance_m: 1000   # spec §5: ~1 km (tek bağlantılı uzay-zaman kümeleme)
+  cluster_gap_days: 2        # spec §5: 2 gün (yerel takvim günü farkı, dahil)
+  top_shares: [0.10, 0.20]   # üst %10 ve üst %20
+  bootstrap_n: 10000
+  bootstrap_seed: 20250531
+  sensitivity_line_distance_m: [1000, 2000]  # YALNIZ duyarlılık; birincil eşik aoi.yaml buffers_m.event_line_distance
+
 labels:                      # arayüz etiketleri
   vegetation_encroachment: {tr: "Hatta yakın yüksek ağaç", en: "Tall vegetation near line"}
   strike_trees: {tr: "Hatta devrilebilecek ağaç", en: "Potential strike trees"}
   fuel_dryness: {tr: "Kuru bitki örtüsü", en: "Dry vegetation"}
-  wind_exposure: {tr: "Rüzgâra açıklık", en: "Wind exposure"}
+  wind_exposure: {tr: "Rüzgâra topoğrafik açıklık", en: "Topographic wind exposure"}  # F3-1: ≈TPI (ρ 0,98); orkestratör onayı F3-34
   fuel_continuity: {tr: "Kesintisiz orman/maki", en: "Continuous forest/shrub fuel"}
   wui_exposure: {tr: "Yerleşime yakınlık", en: "Proximity to buildings"}
   slope: {tr: "Dik yamaç", en: "Steep slope"}

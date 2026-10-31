@@ -100,14 +100,37 @@ def test_main_dispatches_score_stage(monkeypatch):
     monkeypatch.setattr(rp, "run_ingest", lambda *a, **k: seen.append("ingest") or [])
     monkeypatch.setattr(rp, "run_features", lambda *a, **k: seen.append("features") or [])
     monkeypatch.setattr(rp, "run_score", lambda *a, **k: seen.append("score") or [])
+    monkeypatch.setattr(rp, "run_scenario", lambda *a, **k: seen.append("scenario") or [])
+    monkeypatch.setattr(rp, "run_backtest", lambda *a, **k: seen.append("backtest") or [])
     monkeypatch.setattr(rp, "_check_manifest", lambda: seen.append("manifest"))
     rp.main(["--aoi", AOI, "--stage", "score"])
     assert seen == ["score"]
     seen.clear()
     rp.main(["--aoi", AOI, "--stage", "all"])
-    assert seen == ["ingest", "manifest", "features", "score"]
+    assert seen == ["ingest", "manifest", "features", "score", "scenario", "backtest"]
+    for stage in ("scenario", "backtest"):
+        seen.clear()
+        rp.main(["--aoi", AOI, "--stage", stage])
+        assert seen == [stage]
     with pytest.raises(SystemExit, match="ingest stage only"):
         rp.main(["--aoi", AOI, "--stage", "score", "--only", "firms"])
+
+
+def test_scenario_and_backtest_stages_need_risk_files_and_run_modules(syn):
+    for fn in (rp.run_scenario, rp.run_backtest):
+        with pytest.raises(SystemExit, match="run --stage score first"):
+            fn(AOI, runner=lambda c: 0, log=lambda s: None, root=syn.root)
+    for d in DATES:
+        (syn.processed / f"risk_{d}.parquet").write_bytes(b"stub")
+    calls: list[list[str]] = []
+    rp.run_scenario(AOI, runner=lambda c: calls.append(c) or 0, log=lambda s: None,
+                    root=syn.root)
+    rp.run_backtest(AOI, runner=lambda c: calls.append(c) or 0, log=lambda s: None,
+                    root=syn.root)
+    assert [c[2] for c in calls] == ["hatkalkani.model.scenario", "hatkalkani.model.backtest"]
+    assert all(c[-2:] == ["--aoi", AOI] for c in calls)
+    with pytest.raises(SystemExit, match="stage 'backtest' failed"):
+        rp.run_backtest(AOI, runner=lambda c: 3, log=lambda s: None, root=syn.root)
 
 
 def test_config_weight_change_changes_cli_scores(syn):

@@ -37,6 +37,30 @@ REQUIRED_SEGMENT_COLUMNS = ("segment_id", "line_id", "voltage_level", "length_m"
 VIIRS_PRODUCT_PREFIX = "VIIRS_"
 VIIRS_PIXEL_M = 375.0  # nominal VIIRS I-band pixel, risk-model-spec section 5
 SUMMER_MONTHS = (6, 7, 8, 9)  # Jun-Sep, risk-model-spec section 2 (wind_exposure)
+# FIRMS standard-processing `type`: 0 presumed vegetation fire, 1 active volcano, 2 other
+# static land source, 3 offshore. Only 0 is a fire for this model (ADR-013); rows without
+# a type (NRT, `type_source` = nrt_missing) are kept and counted.
+FIRMS_VEGETATION_TYPE = 0
+
+
+def firms_type_filter(df: pd.DataFrame) -> tuple[pd.Series, dict[str, Any]]:
+    """Mask of FIRMS rows that may be vegetation fires plus counts for provenance.
+
+    Keeps ``type == 0`` and missing ``type``; drops every other type. A file without the
+    column (older ingest) keeps every row and says so."""
+    if "type" not in df.columns:
+        return pd.Series(True, index=df.index), {"type_column": False}
+    t = pd.to_numeric(df["type"], errors="coerce")
+    missing = t.isna()
+    keep = missing | (t == FIRMS_VEGETATION_TYPE)
+    dropped = t[~keep].astype(int).value_counts().sort_index()
+    return keep.astype(bool), {
+        "type_column": True,
+        "rule": "keep type 0 (presumed vegetation fire) and missing type (NRT); "
+                "drop 1 volcano, 2 static land source, 3 offshore",
+        "n_excluded_by_type": {str(k): int(v) for k, v in dropped.items()},
+        "n_type_missing_kept": int(missing.sum()),
+    }
 
 
 @dataclass(frozen=True)
@@ -163,7 +187,9 @@ class FeatureContext:
         ok_time = before_cutoff(t, as_of, "FIRMS acq_datetime_utc") & (
             t >= local_day_start(start_day, as_of.tz)
         )
-        sel = df[is_viirs & ok_time].sort_values(
+        ok_type, type_prov = firms_type_filter(df[is_viirs & ok_time])
+        ok_type = ok_type.reindex(df.index, fill_value=False)
+        sel = df[is_viirs & ok_time & ok_type].sort_values(
             ["acq_datetime_utc", "latitude", "longitude"], kind="mergesort"
         ).reset_index(drop=True)
         pts = gpd.GeoSeries(
@@ -193,6 +219,7 @@ class FeatureContext:
             "n_rows_file": int(len(df)),
             "n_viirs_rows": int(is_viirs.sum()),
             "n_viirs_excluded_at_or_after_cutoff": int(late.sum()),
+            "type_filter": type_prov,
             "n_viirs_in_window": int(len(sel)),
             "n_after_cell_day_dedupe": int(len(out)),
             "dedupe": f"one detection per (local day, {VIIRS_PIXEL_M:.0f} m cell)",

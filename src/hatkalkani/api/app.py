@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
+import json
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .routes import router
-from .store import ROOT, load_store
+from .store import ROOT, Store, load_store
 
 log = logging.getLogger("hatkalkani.api")
 
@@ -26,6 +29,22 @@ def _selected_aoi(config_dir: Path) -> str:
     if not aoi:
         raise ValueError("config/aoi.yaml has no `selected` AOI; pass aoi_id explicitly")
     return str(aoi)
+
+
+def _warm_scenario(store: Store) -> None:
+    """Import the scenario module and run one default call so the first request is fast."""
+    dates_file = store.aoi_dir / "scenario_dates.json"
+    if not dates_file.exists():
+        log.info("scenario warm-up skipped: %s missing", dates_file.name)
+        return
+    try:
+        dates = json.loads(dates_file.read_text(encoding="utf-8"))
+        compute = importlib.import_module("hatkalkani.model.scenario").compute_scenario
+        t = time.perf_counter()
+        compute(store.aoi_id, str(dates[0]["date"]), 50.0, "yuksek")
+        log.info("scenario warm-up done in %.0f ms", (time.perf_counter() - t) * 1000)
+    except Exception as exc:  # warm-up must never stop the server
+        log.warning("scenario warm-up skipped: %s: %s", type(exc).__name__, exc)
 
 
 def create_app(
@@ -48,6 +67,7 @@ def create_app(
     app.state.store = load_store(root, aoi, cfg_dir)
     if not app.state.store.by_asof:
         log.warning("no risk_<as_of> files under %s", app.state.store.aoi_dir)
+    _warm_scenario(app.state.store)
     app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     @app.exception_handler(StarletteHTTPException)

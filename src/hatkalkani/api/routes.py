@@ -11,7 +11,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from .store import CHM_YEAR_NOTE_EN, CHM_YEAR_NOTE_TR, TIERS, AsOfData, Store
+from .store import TIERS, AsOfData, Store, chm_note
 
 router = APIRouter(prefix="/api")
 
@@ -80,6 +80,7 @@ def aoi(request: Request, as_of: str | None = None) -> dict[str, Any]:
             "segment_count": len(d.features),
             "tier_counts": d.tier_counts,
             "workorder_count": len(d.workorders),
+            "chm_acq_range": d.chm_acq_range,
         },
     }
 
@@ -136,6 +137,9 @@ def segment(request: Request, segment_id: str, as_of: str | None = None) -> dict
         raise _err(404, f"Segment bulunamadı: {segment_id}", "segment_id örn. 155462929_0001.")
     feat = d.features[i]
     extra = d.detail.get(segment_id, {})
+    note_tr, note_en = chm_note(
+        extra.get("chm_acq_min"), extra.get("chm_acq_max"), extra.get("chm_acq_dominant")
+    )
     props = {
         **feat["properties"],
         "as_of": d.as_of,
@@ -147,10 +151,13 @@ def segment(request: Request, segment_id: str, as_of: str | None = None) -> dict
         "voltage_kv": extra.get("voltage_kv"),
         "risk_pct": extra.get("risk_pct"),
         "imputed": extra.get("imputed", ""),
-        # CHM v2 has no image date (ADR-008): null, never a guess.
+        # Null unless the risk parquet carries CHM image dates (ADR-008): never a guess.
         "chm_year": extra.get("chm_year"),
-        "chm_year_note_tr": CHM_YEAR_NOTE_TR,
-        "chm_year_note_en": CHM_YEAR_NOTE_EN,
+        "chm_acq_min": extra.get("chm_acq_min"),
+        "chm_acq_max": extra.get("chm_acq_max"),
+        "chm_acq_dominant": extra.get("chm_acq_dominant"),
+        "chm_year_note_tr": note_tr,
+        "chm_year_note_en": note_en,
         "factor_labels": s.labels,
     }
     # Feature shape plus the same keys flat at the top level (frontend may use either).

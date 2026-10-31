@@ -3,7 +3,9 @@
 Usage: ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage ingest``
        ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage features``
        ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage score``
-       (``--stage all`` = ingest, MANIFEST check, features, then score)
+       ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage scenario``
+       ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage backtest``
+       (``--stage all`` = ingest, MANIFEST check, features, score, scenario, then backtest)
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ INGEST_STAGES: list[tuple[str, list[str]]] = [
     ("worldcover", [INTERIM + "worldcover.tif"]),
     ("chm", [INTERIM + n for n in (
         "chm_corridor.tif", "chm_segment_stats.parquet", "chm_meta.json")]),
+    ("chm_dates", [INTERIM + n for n in (
+        "chm_acq_segment.parquet", "chm_acq_segment.meta.json")]),
     ("buildings", [INTERIM + "buildings.parquet", INTERIM + "buildings_meta.json"]),
     ("firms", [INTERIM + "firms.parquet"]),
     ("weather", [INTERIM + "wind_hourly.parquet"]),
@@ -172,6 +176,62 @@ def run_score(
     return [{"module": "score", "seconds": dt, "rc": rc, "outputs": outs}]
 
 
+# Scenario and backtest stages (risk-modeler): read the risk files of the score stage.
+SCENARIO_MODULE = "hatkalkani.model.scenario"
+BACKTEST_MODULE = "hatkalkani.model.backtest"
+
+
+def model_stage_command(module: str, aoi: str) -> list[str]:
+    return [sys.executable, "-m", module, "--aoi", aoi]
+
+
+def _run_model_stage(
+    name: str, module: str, needs: list[str], outs: list[str], aoi: str,
+    runner: Callable[[list[str]], int] | None, log: Callable[[str], None], root: Path | None,
+) -> list[dict]:
+    base = root or ROOT
+    proc = base / PROC.format(aoi=aoi)
+    missing = [proc / n for n in needs if not (proc / n).exists()]
+    if missing:
+        shown = ", ".join(p.relative_to(base).as_posix() for p in missing)
+        raise SystemExit(f"missing risk files: {shown}; run --stage score first")
+    t0 = time.time()
+    rc = (runner or _subprocess_runner)(model_stage_command(module, aoi))
+    dt = time.time() - t0
+    log(f"[{name}] rc={rc} {dt:.1f}s -> " + ", ".join(f"{PROC.format(aoi=aoi)}{o}" for o in outs))
+    if rc != 0:
+        raise SystemExit(f"stage '{name}' failed (rc={rc})")
+    return [{"module": name, "seconds": dt, "rc": rc, "outputs": [proc / o for o in outs]}]
+
+
+def run_scenario(
+    aoi: str,
+    runner: Callable[[list[str]], int] | None = None,
+    log: Callable[[str], None] = print,
+    root: Path | None = None,
+) -> list[dict]:
+    needs = [f"risk_{d}.parquet" for d in feature_dates(root or ROOT)]
+    return _run_model_stage("scenario", SCENARIO_MODULE, needs,
+                            ["scenario_dates.json", "scenario_<day>.json"], aoi, runner, log,
+                            root)
+
+
+def run_backtest(
+    aoi: str,
+    runner: Callable[[list[str]], int] | None = None,
+    log: Callable[[str], None] = print,
+    root: Path | None = None,
+) -> list[dict]:
+    import yaml
+
+    base = root or ROOT
+    p = yaml.safe_load((base / "config" / "aoi.yaml").read_text(encoding="utf-8"))["periods"]
+    season = str(p["backtest_season"][0])[:4]
+    return _run_model_stage("backtest", BACKTEST_MODULE, [f"risk_{p['backtest_asof']}.parquet"],
+                            ["backtest.json", f"events_{season}.geojson"], aoi, runner, log,
+                            root)
+
+
 def validate_manifest(root: Path = ROOT) -> list[str]:
     """Return a list of problems (empty list means OK)."""
     from hatkalkani.ingest import common
@@ -220,7 +280,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--aoi", required=True)
     ap.add_argument("--stage", default="ingest",
-                    choices=["ingest", "features", "score", "all"])
+                    choices=["ingest", "features", "score", "scenario", "backtest", "all"])
     ap.add_argument("--only", nargs="+", metavar="MODULE", help=f"subset of {MODULES}")
     ap.add_argument("--force", action="store_true", help="delete stage outputs and recompute")
     args = ap.parse_args(argv)
@@ -230,7 +290,7 @@ def main(argv: list[str] | None = None) -> None:
         _print_table(results, t0)
         _check_manifest()
         return
-    if args.stage in ("features", "score") and (args.only or args.force):
+    if args.stage != "all" and (args.only or args.force):
         raise SystemExit("--only/--force apply to the ingest stage only")
     results = []
     if args.stage == "all":
@@ -240,6 +300,10 @@ def main(argv: list[str] | None = None) -> None:
         results += run_features(args.aoi)
     if args.stage in ("score", "all"):
         results += run_score(args.aoi)
+    if args.stage in ("scenario", "all"):
+        results += run_scenario(args.aoi)
+    if args.stage in ("backtest", "all"):
+        results += run_backtest(args.aoi)
     _print_table(results, t0)
 
 

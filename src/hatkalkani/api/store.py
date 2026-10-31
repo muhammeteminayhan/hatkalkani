@@ -46,6 +46,30 @@ def plain(value: Any) -> Any:
     return value
 
 
+def _date_str(value: Any) -> str | None:
+    """YYYY-MM-DD text for a date-like cell, None if missing."""
+    value = plain(value)
+    if value is None or value == "":
+        return None
+    return str(value)[:10]
+
+
+def chm_note(min_: str | None, max_: str | None, dominant: str | None) -> tuple[str, str]:
+    """Build the CHM image-date note from data; fall back to the "unknown" note."""
+    if not dominant:
+        return CHM_YEAR_NOTE_TR, CHM_YEAR_NOTE_EN
+    span = max_ and min_
+    tr = f"Ağaç yüksekliği görüntü tarihi: {dominant}"
+    en = f"Tree-height imagery date: {dominant}"
+    if span:
+        tr += f" (bu parçada {min_}–{max_}; Meta/WRI CHM v2 mozaiği)"
+        en += f" (this segment {min_}–{max_}; Meta/WRI CHM v2 mosaic)"
+    else:
+        tr += " (Meta/WRI CHM v2 mozaiği)"
+        en += " (Meta/WRI CHM v2 mosaic)"
+    return tr, en
+
+
 def _geom_bbox(geom: dict[str, Any]) -> tuple[float, float, float, float]:
     xs: list[float] = []
     ys: list[float] = []
@@ -77,6 +101,7 @@ class AsOfData:
     line_km: float
     tier_counts: dict[str, int]
     bbox: list[float]
+    chm_acq_range: list[str] | None = None
 
 
 @dataclass
@@ -155,6 +180,9 @@ def _load_asof(aoi_dir: Path, as_of: str, factors: list[str]) -> AsOfData | None
             "risk_pct": plain(r.get("risk_pct")),
             "imputed": plain(r.get("imputed")) or "",
             "chm_year": plain(r.get("chm_year")),
+            "chm_acq_min": _date_str(r.get("chm_acq_min")),
+            "chm_acq_max": _date_str(r.get("chm_acq_max")),
+            "chm_acq_dominant": _date_str(r.get("chm_acq_dominant")),
         }
 
     wo_files = {
@@ -176,8 +204,11 @@ def _load_asof(aoi_dir: Path, as_of: str, factors: list[str]) -> AsOfData | None
          max(b[2] for b in bboxes), max(b[3] for b in bboxes)]
         if bboxes else []
     )
+    mins = [d["chm_acq_min"] for d in detail.values() if d["chm_acq_min"]]
+    maxs = [d["chm_acq_max"] for d in detail.values() if d["chm_acq_max"]]
+    chm_range = [min(mins), max(maxs)] if mins and maxs else None
     return AsOfData(as_of, features, bboxes, index, detail, meta, workorders, wo_files,
-                    round(line_km, 3), tier_counts, bbox)
+                    round(line_km, 3), tier_counts, bbox, chm_range)
 
 
 def load_store(data_root: Path, aoi_id: str, config_dir: Path) -> Store:

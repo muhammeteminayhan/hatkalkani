@@ -7,7 +7,7 @@ Durum: ⬜ kontrol edilmedi · 🔎 erişim doğrulandı · ✅ indirildi/işlen
 | # | Veri | Amaç | Erişim | Lisans | Durum | Yerel yol | Not |
 |---|---|---|---|---|---|---|---|
 | 1 | OSM elektrik hatları ve direkler | Hat geometrisi | Overpass API | ODbL 1.0 | ⬜ (2026-10-30: Overpass 502, 2 deneme; docs/reports/F1-2-erisim.md) | data/raw/osm/ | Dağıtım hattı kapsaması ilçeye göre değişir |
-| 2 | Meta/WRI ağaç yüksekliği (v2, yoksa v1) | Ağaç–hat yakınlığı | S3 anonim, COG pencere okuma | CC BY 4.0 | 🔎 [D 2026-10-30] v1 tiles.geojson HTTP 200; v2 chm/ listelendi (tiles.geojson 58.9 MB, indirilmedi). İzmir v1 karo: 30 (data/interim/f1_chm_tiles_izmir.csv) | data/raw/chm/ | 1 m; MAE ~2,8 m (v1); taban yılı karoya göre |
+| 2 | Meta/WRI ağaç yüksekliği (v2, yoksa v1) | Ağaç–hat yakınlığı | S3 anonim, COG pencere okuma | CC BY 4.0 | 🔎 [D 2026-10-30] v1 tiles.geojson HTTP 200; v2 chm/ listelendi (tiles.geojson 58.9 MB, indirilmedi). İzmir v1 karo: 30 (data/interim/f1_chm_tiles_izmir.csv) | data/raw/chm/ | 1 m; MAE ~2,8 m (v1); görüntü tarihi v2'de de var: `metadata/<karo>.geojson` → `properties.acq_date` (ayak izi başına, mozaik); bkz. aşağıdaki CHM-DATE notu |
 | 3 | Sentinel-2 L2A | Kuruluk (NDMI), NDVI | Earth Search STAC | Copernicus açık veri | 🔎 [D 2026-10-30] https://earth-search.aws.element84.com/v1; sentinel-2-c1-l2a (İzmir 2025-04-01..05-31 matched=407) | data/raw/s2/ | Koleksiyon adı doğrulanacak |
 | 4 | Copernicus DEM GLO-30 | Eğim, TPI | Earth Search veya S3 | Copernicus DEM lisansı | 🔎 [D 2026-10-30] STAC cop-dem-glo-30; S3 N37–N39 × E026–E027 HEAD 200 | data/raw/dem/ | |
 | 5 | ESA WorldCover 2021 | Yakıt sürekliliği | S3 anonim | CC BY 4.0 | 🔎 [D 2026-10-30] İzmir: N36E024, N36E027, N39E024, N39E027 (HEAD 200) | data/raw/worldcover/ | |
@@ -38,3 +38,9 @@ Risk: MANIFEST'teki FIRMS URL'lerinde MAP_KEY `***` ve kaynak `VIIRS_SNPP_SP|NRT
 ## F2-1 notu (ingest)
 - OSM hat ve ilçe sınırı (Overpass, overpass-api.de; kumi.systems yedek, erişilemedi): ODbL 1.0. Ham yanıtlar `data/raw/izmir_menderes/`, kayıtlar `data/raw/MANIFEST.csv`. Çıktılar `data/processed/izmir_menderes/{boundary,lines,segments}.parquet`.
 - EDAŞ dosyası (GPKG/SHP) `data/manual/edas/` altına konursa OSM yerine kullanılır; beklenen sütunlar: kimlik (id/hat_id/objectid), gerilim (kV ya da V; sütun adı gerilim/voltage/kv), çizgi geometri, tanımlı CRS.
+
+## CHM-DATE notu (görüntü tarihi)
+- DÜZELTME: v2 karolarında görüntü tarihi VAR. `.../dinov3_global_chm_v2_ml3/metadata/<quadkey>.geojson` dosyalarında her ayak izi için `properties.acq_date` (YYYY-MM-DD) bulunur. `tiles.geojson` ve `chm_meta.json`'daki "unknown / tarih yok" ifadesi yanlıştır (chm_meta.json bu görevde değiştirilmedi).
+- Menderes: 4 metadata dosyası (~46 MB) `data/raw/chm_meta/` altında, MANIFEST kaynağı `chm_v2_metadata`. Sunucu tarafında bbox süzmesi yok; tam indirilir, yerelde bbox ile okunur.
+- Çıktı: `data/interim/izmir_menderes/chm_acq_segment.parquet` (+ `.meta.json`). Tarihler 2016-07-22..2020-02-18; CHM mozaik olduğundan segment başına birden çok tarih olabilir (dominant = ±30 m koridorda alanca en büyük).
+- Lisans/atıf: CC BY 4.0, Meta and World Resources Institute (WRI) - 2024. High Resolution Canopy Height Maps (CHM).

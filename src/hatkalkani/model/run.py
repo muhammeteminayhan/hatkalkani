@@ -42,6 +42,49 @@ SEGMENT_COLUMNS = ["segment_id", "line_id", "seq", "voltage_class", "voltage_lev
 API_SEGMENT_PROPERTIES = ["segment_id", "line_id", "voltage_class", "risk", "tier",
                           "p_ignition", "consequence", "top_factors"]
 GEOJSON_DECIMALS = {"risk": 1, "p_ignition": 3, "consequence": 3}
+# Per-segment CHM v2 image dates (ingest chm_dates, ADR-008 correction). chm_meta.json's
+# `image_dates` is NOT used for chm_year.
+CHM_DATES_FILE = "chm_acq_segment.parquet"
+CHM_DATE_COLUMNS = ["chm_acq_min", "chm_acq_max", "chm_acq_dominant"]
+
+
+def chm_dates_frame(root: Path, aoi: str, segment_ids: list[str]) -> tuple[pd.DataFrame,
+                                                                          dict[str, Any]]:
+    """chm_year (Int64) and chm_acq_min/max/dominant (YYYY-MM-DD text) per segment.
+
+    Missing file: every value is missing and the metadata says why (synthetic AOIs)."""
+    path = Path(root) / "data" / "interim" / aoi / CHM_DATES_FILE
+    idx = pd.RangeIndex(len(segment_ids))
+    if not path.exists():
+        out = pd.DataFrame({"chm_year": pd.array([pd.NA] * len(idx), dtype="Int64")},
+                           index=idx)
+        for c in CHM_DATE_COLUMNS:
+            out[c] = pd.array([None] * len(idx), dtype="string")
+        return out, {"file": None, "note": f"{CHM_DATES_FILE} missing; CHM image date unknown"}
+    d = pd.read_parquet(path)
+    need = ["segment_id", "chm_acq_year", *CHM_DATE_COLUMNS]
+    if missing := [c for c in need if c not in d.columns]:
+        raise SystemExit(f"{path.name} lacks columns {missing}; rerun ingest chm_dates")
+    if not d["segment_id"].astype(str).is_unique:
+        raise SystemExit(f"{path.name}: segment_id is not unique")
+    d = d.assign(segment_id=d["segment_id"].astype(str)).set_index("segment_id")
+    d = d.reindex(segment_ids)
+    out = pd.DataFrame({"chm_year": pd.array(d["chm_acq_year"].to_numpy(), dtype="Int64")},
+                       index=idx)
+    for c in CHM_DATE_COLUMNS:
+        s = pd.to_datetime(d[c].to_numpy(), errors="coerce")
+        out[c] = pd.array([None if pd.isna(v) else v.strftime("%Y-%m-%d") for v in s],
+                          dtype="string")
+    years = out["chm_year"].dropna().astype(int)
+    meta = {
+        "file": CHM_DATES_FILE,
+        "chm_year": "chm_acq_year of the segment (dominant footprint date's year)",
+        "n_missing": int(out["chm_year"].isna().sum()),
+        "acq_min": min(out["chm_acq_min"].dropna(), default=None),
+        "acq_max": max(out["chm_acq_max"].dropna(), default=None),
+        "year_counts": {str(k): int(v) for k, v in years.value_counts().sort_index().items()},
+    }
+    return out, meta
 
 
 def output_paths(processed: Path, as_of: str) -> dict[str, Path]:
@@ -99,7 +142,8 @@ def compute_outputs(
     body = res.frame.drop(columns="segment_id")
     risk = pd.concat([seg.drop(columns="geometry"), pd.Series(fmeta["as_of"], index=seg.index,
                       name="as_of"), body, features[extra].reset_index(drop=True)], axis=1)
-    risk["chm_year"] = pd.array([pd.NA] * len(risk), dtype="Int64")  # CHM v2 undated (ADR-008)
+    chm_dates, chm_meta = chm_dates_frame(root, aoi, seg["segment_id"].astype(str).tolist())
+    risk = pd.concat([risk, chm_dates], axis=1)
     risk = gpd.GeoDataFrame(risk, geometry=seg.geometry.to_numpy(), crs=segments.crs)
     risk = risk.to_crs("EPSG:4326")
     metric_crs = load_feature_config(aoi, root).metric_crs
@@ -110,8 +154,14 @@ def compute_outputs(
         "as_of": fmeta["as_of"],
         "cutoff_utc_exclusive": fmeta.get("cutoff_utc_exclusive"),
         "features_schema_version": fmeta.get("schema_version"),
-        "chm_year": None,
-        "chm_year_note": "CHM v2 has no acquisition date (ADR-008); baseline year unknown",
+        "chm_year": chm_meta.get("year_counts") or None,
+        "chm_year_note": (
+            "per-segment CHM v2 image dates from the tile metadata footprints "
+            f"({CHM_DATES_FILE}; ADR-008 correction); the CHM is a mosaic"
+            if chm_meta.get("file") else
+            "CHM image date unknown: chm_acq_segment.parquet missing (ADR-008)"
+        ),
+        "chm_dates": chm_meta,
         "workorders": {
             "tiers": ["kritik", "yuksek"],
             "n_spans": int(len(workorders)),
@@ -154,9 +204,12 @@ def score_as_of(aoi: str, as_of: date | str, root: Path = common.ROOT, *,
     features, fmeta = read_features(fpath)
     segments = gpd.read_parquet(processed / "segments.parquet")
     risk, workorders, meta = compute_outputs(features, fmeta, segments, root, aoi)
+    chm_dates = root / "data" / "interim" / aoi / CHM_DATES_FILE
     meta["inputs_sha256"] = {
         p.relative_to(root).as_posix(): common.sha256_file(p)
-        for p in (fpath, processed / "segments.parquet", root / "config" / "risk_weights.yaml")
+        for p in (fpath, processed / "segments.parquet", root / "config" / "risk_weights.yaml",
+                  chm_dates)
+        if p.exists()
     }
     paths = write_outputs(risk, workorders, meta, processed) if write else {}
     return {"risk": risk, "workorders": workorders, "meta": meta, "paths": paths}

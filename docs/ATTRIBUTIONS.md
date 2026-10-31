@@ -16,7 +16,7 @@
 
 ## Veri notları
 - **Overture (AOI, `data/interim/izmir_menderes/buildings_meta.json`):** Kayıt sayısı 65 873; Microsoft ML Buildings 57 475, OpenStreetMap 8 398. Bu AOI çıktısında Google ve Esri kaydı görünmüyor; atıf metni yine de bu kaynakları anıyor. Lisans kayıt bazında ham veriden okunur: ODbL-1.0 (paylaşım-benzeri yükümlülük geçerli).
-- **CHM v2:** Görüntü tarihi yok (`chm_meta.json`: `image_dates.v2 = unknown`). Güncel durum için Sentinel-2 ile destekle.
+- **CHM v2:** Görüntü tarihi ayak izi başına `metadata/<karo>.geojson` → `acq_date` alanında var (bkz. `chm_acq_segment.parquet`); `chm_meta.json`'daki "unknown" ifadesi eskidir. Tarihler 2016-2020; güncel durum için Sentinel-2 ile destekle.
 - **Open-Meteo:** Ücretli plan, ürünleşmede gerekir (PITCH notu).
 - **[DOĞRULANMADI]:** Copernicus DEM resmi atıf metni; CHM v2 için Maxar satırı.
 
