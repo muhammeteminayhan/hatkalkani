@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HatKalkanı</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 4 7v8c0 8 5 13 12 15 7-2 12-7 12-15V7z' fill='%23b10026'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#map" data-i18n="skip">Haritaya geç</a>
+
+<header class="topbar">
+  <div class="brand">
+    <h1 data-i18n="app_title">HatKalkanı</h1>
+    <p data-i18n="app_sub"></p>
+  </div>
+  <dl class="kpis" id="kpis" aria-live="polite">
+    <div class="kpi"><dt data-i18n="kpi_line_km"></dt><dd id="kpi-km">–</dd></div>
+    <div class="kpi kpi-crit"><dt data-i18n="kpi_critical"></dt><dd id="kpi-crit">–</dd></div>
+    <div class="kpi"><dt data-i18n="kpi_workorders"></dt><dd id="kpi-wo">–</dd></div>
+  </dl>
+  <div class="top-actions">
+    <span class="src-badge" id="src-badge"></span>
+    <button type="button" id="lang-btn" class="btn"></button>
+  </div>
+</header>
+
+<div class="mockbar" id="mockbar" hidden data-i18n="mock_banner"></div>
+<div class="notices" role="note">
+  <span data-i18n="notice_relative"></span>
+  <span data-i18n="notice_osm"></span>
+</div>
+
+<main class="layout">
+  <aside class="panel" aria-label="HatKalkanı">
+    <div class="tabs" role="tablist" id="tabs" data-i18n-aria="tabs_label">
+      <button role="tab" id="tab-work" aria-controls="pane-work" aria-selected="true" data-tab="work" data-i18n="tab_work"></button>
+      <button role="tab" id="tab-scenario" aria-controls="pane-scenario" aria-selected="false" tabindex="-1" data-tab="scenario" data-i18n="tab_scenario"></button>
+      <button role="tab" id="tab-validation" aria-controls="pane-validation" aria-selected="false" tabindex="-1" data-tab="validation" data-i18n="tab_validation"></button>
+      <button role="tab" id="tab-about" aria-controls="pane-about" aria-selected="false" tabindex="-1" data-tab="about" data-i18n="tab_about"></button>
+    </div>
+
+    <section id="pane-work" role="tabpanel" aria-labelledby="tab-work" class="pane">
+      <h2 data-i18n="wo_title"></h2>
+      <p class="hint" data-i18n="wo_hint"></p>
+      <div class="export" role="group" data-i18n-aria="export_title">
+        <a class="btn" id="exp-csv" data-i18n="export_csv" download></a>
+        <a class="btn" id="exp-geojson" data-i18n="export_geojson" download></a>
+        <a class="btn" id="exp-gpkg" data-i18n="export_gpkg" download></a>
+      </div>
+      <div id="wo-status" class="status" role="status"></div>
+      <ol class="wolist" id="wolist"></ol>
+    </section>
+
+    <section id="pane-scenario" role="tabpanel" aria-labelledby="tab-scenario" class="pane" hidden>
+      <h2 data-i18n="sc_title"></h2>
+      <p class="hint" data-i18n="sc_hint"></p>
+      <div id="sc-status" class="status" role="status"></div>
+      <form id="sc-form" class="form" onsubmit="return false" hidden>
+        <label for="sc-date" data-i18n="sc_date"></label>
+        <select id="sc-date"></select>
+        <div class="gust-hint" id="sc-maxgust"></div>
+        <label for="sc-gust"><span data-i18n="sc_gust"></span>: <output id="sc-gust-out" for="sc-gust"></output></label>
+        <input type="range" id="sc-gust" step="1">
+        <label for="sc-tier" data-i18n="sc_min_tier"></label>
+        <select id="sc-tier"></select>
+      </form>
+      <div id="sc-result" aria-live="polite"></div>
+    </section>
+
+    <section id="pane-validation" role="tabpanel" aria-labelledby="tab-validation" class="pane" hidden>
+      <h2 data-i18n="val_title"></h2>
+      <p class="hint" data-i18n="val_hint"></p>
+      <div id="val-status" class="status" role="status"></div>
+      <div id="val-result"></div>
+    </section>
+
+    <section id="pane-about" role="tabpanel" aria-labelledby="tab-about" class="pane" hidden>
+      <h2 data-i18n="about_title"></h2>
+      <div id="about-meta"></div>
+      <h3 data-i18n="about_honest"></h3>
+      <ul class="plain" id="about-notes">
+        <li data-i18n="about_n1"></li><li data-i18n="about_n2"></li><li data-i18n="about_n3"></li>
+        <li data-i18n="about_n4"></li><li data-i18n="about_n5"></li>
+      </ul>
+      <div id="about-sources" class="status" role="status"></div>
+      <ul class="sources" id="sources-list"></ul>
+    </section>
+  </aside>
+
+  <div class="mapwrap">
+    <div id="map" tabindex="-1" role="region" data-i18n-aria="map_label"></div>
+    <div class="legend" id="legend" role="group" data-i18n-aria="legend_title">
+      <div class="legend-title" data-i18n="legend_title"></div>
+      <ul id="legend-list"></ul>
+      <div id="legend-events" class="legend-ev" hidden><span class="ev-dot"></span><span data-i18n="val_events_legend"></span></div>
+    </div>
+    <div class="map-asof" id="map-asof" hidden></div>
+    <aside class="drawer" id="drawer" aria-labelledby="drawer-title" hidden tabindex="-1">
+      <div class="drawer-head">
+        <h2 id="drawer-title" data-i18n="drawer_title"></h2>
+        <button type="button" class="btn icon" id="drawer-close" data-i18n-aria="drawer_close">×</button>
+      </div>
+      <div id="drawer-body"></div>
+    </aside>
+  </div>
+</main>
+
+<footer class="footer">
+  <div id="foot-sources" class="foot-sources"></div>
+  <div class="foot-map"><span id="foot-basemap"></span> · <span data-i18n="footer_maplibre"></span></div>
+</footer>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

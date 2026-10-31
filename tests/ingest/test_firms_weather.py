@@ -101,7 +101,7 @@ def _firms_root(tmp_path, bbox, product="MODIS_SP", day="2020-03-01"):
     root = tmp_path
     legacy = root / "data" / "raw" / "firms" / "MODIS_2020.csv"
     legacy.parent.mkdir(parents=True)
-    pd.DataFrame({"product": [product], "acq_date": [day]}).to_csv(legacy, index=False)
+    pd.DataFrame({"product": [product], "acq_date": [day], "type": [0]}).to_csv(legacy, index=False)
     url = f"https://x/api/area/csv/***/MODIS_SP|NRT/{','.join(f'{v:.4f}' for v in bbox)}/2020"
     row = {
         "kaynak": "firms:MODIS", "url": url, "yerel_yol": "data/raw/firms/MODIS_2020.csv",
@@ -147,9 +147,47 @@ def test_firms_migration_refused_on_bbox_mismatch_and_nrt_is_provisional(tmp_pat
     exp = firms.expected_meta("aoi_a", "MODIS", 2020, real, d(2025, 9, 30))
     assert not firms.migrate_legacy("aoi_a", "MODIS", 2020, exp, root)
     assert legacy.exists()
-    # NRT-filled file is never considered fresh
+    # NRT-filled file is provisional: stale once older than NRT_TTL_DAYS
     dest = firms.year_file("aoi_a", "MODIS", 2020, root)
     dest.parent.mkdir(parents=True)
     pd.DataFrame({"product": ["MODIS_NRT"]}).to_csv(dest, index=False)
     firms.write_year_meta(dest, exp, ["MODIS_SP", "MODIS_NRT"], root)
+    import json
+
+    side = firms.sidecar_path(dest)
+    meta = json.loads(side.read_text(encoding="utf-8"))
+    meta["fetched_utc"] = "2020-12-31T00:00:00+00:00"
+    side.write_text(json.dumps(meta), encoding="utf-8")
+    assert not firms.is_fresh(dest, exp, root)
+
+
+def test_parse_firms_type_kept_for_sp_and_blank_for_nrt():
+    sp_text = FIRMS_SAMPLE.replace("daynight\n", "daynight,type\n", 1).replace(
+        ",N\n", ",N,0\n"
+    ).replace(",D\n", ",D,2\n")
+    sp = firms.parse_firms_csv(sp_text, "VIIRS_SNPP_SP")
+    assert sp["type"].tolist() == [0, 2]
+    assert (sp["type_source"] == "firms_api").all()
+    nrt = firms.parse_firms_csv(FIRMS_SAMPLE, "VIIRS_SNPP_NRT")
+    assert nrt["type"].isna().all()
+    assert (nrt["type_source"] == "nrt_missing").all()
+
+
+def test_asof_end_from_config_and_nrt_cache_policy(tmp_path):
+    assert firms.asof_end({"periods": {"current_asof": "2026-10-30"}}) == date(2026, 10, 30)
+    bbox = (26.8865, 37.935, 27.371, 38.3641)
+    root = tmp_path
+    exp = firms.expected_meta("aoi_a", "MODIS", 2026, bbox, date(2026, 10, 30))
+    assert exp["end"] == "2026-10-30" and exp["schema"] == firms.CACHE_SCHEMA
+    dest = firms.year_file("aoi_a", "MODIS", 2026, root)
+    dest.parent.mkdir(parents=True)
+    pd.DataFrame(columns=firms.KEEP_COLUMNS).to_csv(dest, index=False)
+    firms.write_year_meta(dest, exp, ["MODIS_SP", "MODIS_NRT"], root)
+    assert firms.is_fresh(dest, exp, root)  # fetched today, after the window closed
+    side = firms.sidecar_path(dest)
+    import json
+
+    meta = json.loads(side.read_text(encoding="utf-8"))
+    meta["fetched_utc"] = "2026-10-01T00:00:00+00:00"  # before window end -> provisional
+    side.write_text(json.dumps(meta), encoding="utf-8")
     assert not firms.is_fresh(dest, exp, root)

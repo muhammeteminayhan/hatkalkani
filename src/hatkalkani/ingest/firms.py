@@ -1,4 +1,4 @@
-"""NASA FIRMS active-fire detections for the AOI bbox (+ margin), 2015-2025 season.
+"""NASA FIRMS active-fire detections for the AOI bbox (+ margin), 2015 .. current_asof.
 
 Run: ``uv run python -m hatkalkani.ingest.firms --aoi izmir_menderes``
 
@@ -15,7 +15,7 @@ import logging
 import math
 import os
 import time
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -53,7 +53,11 @@ KEEP_COLUMNS = [
     "daynight",
     "scan",
     "track",
+    "type",
+    "type_source",
 ]
+CACHE_SCHEMA = 2  # 2: carries FIRMS `type` + `type_source`; schema-1 caches are stale
+NRT_TTL_DAYS = 14  # a provisional (NRT) year file is reused this long after it was fetched
 
 
 class FirmsKeyError(RuntimeError):
@@ -103,6 +107,13 @@ def parse_firms_csv(text: str, source: str) -> pd.DataFrame:
     if "satellite" not in df:
         df["satellite"] = source
     df["confidence"] = df["confidence"].astype(str)  # VIIRS: l/n/h, MODIS: 0-100
+    # `type` (0 vegetation fire, 2 static land source, 3 offshore) exists in SP archives only.
+    if "type" in df:
+        df["type"] = pd.to_numeric(df["type"], errors="coerce").astype("Int64")
+        df["type_source"] = "firms_api"
+    else:
+        df["type"] = pd.array([pd.NA] * len(df), dtype="Int64")
+        df["type_source"] = "nrt_missing" if source.endswith("_NRT") else "missing"
     for col in KEEP_COLUMNS:
         if col not in df:
             df[col] = pd.NA
@@ -206,6 +217,7 @@ def expected_meta(
 ) -> dict[str, object]:
     """What a cached year file must have been built from (no data_ids; those are a result)."""
     return {
+        "schema": CACHE_SCHEMA,
         "aoi_id": aoi_id,
         "source": source,
         "year": year,
@@ -229,7 +241,15 @@ def is_fresh(dest: Path, expected: dict[str, object], root: Path = ROOT) -> bool
         return False
     if any(got.get(k) != v for k, v in expected.items()):
         return False
-    return not any(str(d).endswith("_NRT") for d in got.get("data_ids", []))
+    if not any(str(d).endswith("_NRT") for d in got.get("data_ids", [])):
+        return True
+    # Provisional: reuse only if fetched after the window closed and still recent.
+    try:
+        fetched = datetime.fromisoformat(str(got["fetched_utc"])).date()
+    except (KeyError, ValueError):
+        return False
+    end = date.fromisoformat(str(expected["end"]))
+    return fetched >= end and (datetime.now(UTC).date() - fetched).days <= NRT_TTL_DAYS
 
 
 def _firms_url(data_ids: list[str], meta: dict[str, object]) -> str:
@@ -240,7 +260,7 @@ def _firms_url(data_ids: list[str], meta: dict[str, object]) -> str:
 def write_year_meta(
     dest: Path, expected: dict[str, object], data_ids: list[str], root: Path = ROOT
 ) -> None:
-    meta = {**expected, "data_ids": data_ids}
+    meta = {**expected, "data_ids": data_ids, "fetched_utc": datetime.now(UTC).isoformat()}
     sidecar_path(dest).write_text(json.dumps(meta, indent=2), encoding="utf-8")
     register(dest, f"firms:{expected['source']}", _firms_url(data_ids, meta), LICENSE, root)
 
@@ -268,6 +288,8 @@ def migrate_legacy(
     if old_bbox != expected["bbox"] or parts[-1] != str(year):
         return False
     df = pd.read_csv(old, dtype={"confidence": str})
+    if "type" not in df.columns:
+        return False  # schema-1 file: re-fetch to obtain `type`
     if not df.empty:
         days = pd.to_datetime(df["acq_date"]).dt.date
         if days.min() < date.fromisoformat(str(expected["start"])):
@@ -323,6 +345,12 @@ def fetch_year(
     return dest
 
 
+def asof_end(cfg: dict) -> date:
+    """End date of the FIRMS series: periods.current_asof, or today when empty."""
+    raw = cfg["periods"].get("current_asof")
+    return date.fromisoformat(str(raw)) if raw else datetime.now(UTC).date()
+
+
 def build(aoi_id: str) -> Path:
     cfg = yaml.safe_load((ROOT / "config" / "aoi.yaml").read_text(encoding="utf-8"))
     load_aoi(aoi_id)  # validates AOI id
@@ -331,7 +359,7 @@ def build(aoi_id: str) -> Path:
     b = gpd.read_parquet(processed_dir(aoi_id) / "boundary.parquet").to_crs("EPSG:4326")
     bbox = expand_bbox(*b.total_bounds, MARGIN_KM)
     first = date.fromisoformat(cfg["periods"]["firms_history"][0])
-    last = date.fromisoformat(cfg["periods"]["backtest_season"][1])
+    last = asof_end(cfg)
     out = ROOT / "data" / "interim" / aoi_id / "firms.parquet"
 
     years = range(first.year, last.year + 1)
@@ -352,7 +380,7 @@ def build(aoi_id: str) -> Path:
         paths.append(fetch_year(key, aoi_id, s, y, bbox, avail, last))
     frames = []
     for p in paths:
-        df = pd.read_csv(p, dtype={"confidence": str})
+        df = pd.read_csv(p, dtype={"confidence": str, "type": "Int64"})
         if not df.empty:
             frames.append(df)
     df = pd.concat(frames, ignore_index=True)

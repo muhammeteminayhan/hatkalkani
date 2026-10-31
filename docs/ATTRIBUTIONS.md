@@ -23,11 +23,14 @@
 ## Yazılım
 | Bileşen | Lisans |
 |---|---|
-| MapLibre GL JS | BSD-3-Clause |
+| MapLibre GL JS 4.7.1 (web/vendor/, lisans: web/vendor/LICENSE-maplibre-gl.txt) | BSD-3-Clause |
 | Python kütüphaneleri | F5'te `uv pip list` çıktısından lisanslarıyla eklenecek |
 
 ## Harita altlığı
-- Seçilen altlık ve şartları buraya yazılacak (frontend-dev, F4).
+- **Çevrimiçi altlık:** OpenFreeMap "positron" stili (https://tiles.openfreemap.org/styles/positron). API anahtarı ve kayıt gerekmez. Sitesindeki SSS (2026-10-31 kontrol): ticari kullanım serbest; atıf zorunlu. Stil kodu MIT, OpenMapTiles şeması CC BY 4.0, veri ODbL (OpenStreetMap).
+- **Atıf metni:** "OpenFreeMap © OpenMapTiles Data from OpenStreetMap" (MapLibre atıf denetimi) ve altbilgide "Altlık: OpenFreeMap © OpenMapTiles, veri © OpenStreetMap katkıcıları".
+- **Çevrimdışı yedek:** Ağ yoksa (4 sn zaman aşımı) düz arka plan, /api/aoi/boundary ilçe sınırı ve hat katmanları gösterilir; altbilgi bunu belirtir.
+- **Not:** Şartlar sunucu tarafında değişebilir; jüri demosundan önce yeniden bakın.
 
 ## Yapay zekâ araçları
 Bu projede kod, analiz ve metin üretiminde Claude Code (Anthropic) kullanıldı. Üretilen içeriğin doğruluğu takım tarafından kontrol edildi.

@@ -38,7 +38,23 @@ Tüm yanıtlar JSON (UTF-8) ve koordinatlar EPSG:4326'dır. Sözleşme değişik
 | `GET /api/backtest` | `{"as_of","season","n_events","top10":{"share","expected","lift","ci95":[lo,hi]},"top20":{...},"baselines":{...},"limitations_tr":[],"limitations_en":[]}` |
 | `GET /api/backtest/events` | GeoJSON (olay kümeleri) |
 | `GET /api/meta/sources` | `[{"name","license","attribution","url"}]` |
+| `GET /api/aoi/boundary` | GeoJSON (ilçe sınırı; v0.2, ADR-011) |
 | `GET /` | web/index.html (statik) |
+
+**v0.2 eki (ADR-011):**
+- `aoi`, `segments`, `segments/{id}`, `workorders` ve `workorders/export` isteğe bağlı `as_of=YYYY-MM-DD` alır; varsayılan `periods.current_asof`.
+- `health` yanıtında ayrıca `as_ofs:[...]` bulunur.
+- Backtest ve senaryo dosyası yoksa yanıt 503 ve `{"detail_tr","detail_en"}` olur.
+- Senaryo `hatkalkani.model.scenario.compute_scenario(aoi_id, date, gust_kmh, min_tier)` ile hesaplanır.
+- `backtest`: `ci95` lift'in güven aralığıdır. Ek alanlar `event_line_distance_m` ve `n_events_total` (hat mesafesinden bağımsız küme sayısı). `baselines` biçimi: `{<anahtar>: {"label_tr","label_en","top10":{"share","lift","ci95"},"top20":{...}}}`.
+- `backtest/events` özellikleri: `event_id, start_date, end_date, n_detections, dist_to_line_m, near_line, nearest_segment_id, risk_pct_nearest`.
+- `scenario.inputs`: `{"gust_kmh","min_tier","as_of_used"}`. `segments` hedeflenen hatların segmentleridir (`/api/segments` özellikleri + `gust_kmh`).
+- F4-1 uygulama ekleri (geriye uyumlu):
+  - `aoi` yanıtında `as_of`.
+  - `segments/{id}`, Feature ile birlikte aynı anahtarları üst düzeyde de döner. Ek alanlar: `chm_year_note_tr/en`, `norm`, `factor_labels`.
+  - `workorders?format=json` bir dizi döner; toplam sayı `X-Total-Count` başlığındadır. `segment_ids` `;` ile ayrılmış metindir.
+  - Yeni `GET /api/meta/factors`.
+  - Diğer hatalar `{"error","hint"}` biçimindedir.
 
 ## Arayüz düzeni
 - **Sol panel (sekmeler):** İş listesi · Senaryo · Doğrulama · Hakkında/Kaynaklar.

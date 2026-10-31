@@ -1,5 +1,5 @@
-"""Placeholder until F3-2 adds the scoring model: the package imports and the features it
-will consume expose a direction for every factor (needed for percentile normalisation)."""
+"""Package smoke tests: the model package imports and every registered factor exposes the
+direction the percentile normalisation needs."""
 
 from __future__ import annotations
 

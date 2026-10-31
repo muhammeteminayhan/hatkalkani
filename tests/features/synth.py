@@ -80,6 +80,7 @@ RISK_YAML = {
         "strike_max_distance_m": 30,
         "strike_min_cluster_px": 4,
     },
+    "tiers": {"kritik": 0.95, "yuksek": 0.80, "orta": 0.50},  # used by the model tests
 }
 
 SEGMENTS = {  # segment_id: (line_id, level, x0, x1, y)

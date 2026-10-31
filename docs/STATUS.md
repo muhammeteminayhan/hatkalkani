@@ -2,7 +2,7 @@
 
 Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonra ilk okunacak dosya budur.
 
-**Son güncelleme:** 2026-10-31 — F2 bitti ve commit'lendi: tek komutla ingest önbellekten ~25 sn, testler geçiyor, Yüksek bulgular düzeltildi. F3 kullanıcı onayıyla başladı: F3-1 ve başvuru haritası (MAP-1) çalışıyor. Başvuru son geçişi 1–2 Kas.
+**Son güncelleme:** 2026-10-31 15:45 — Kullanıcı yönü (31 Eki): tarihlere takılmadan çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra. F3-2 ve F2-5b harcama limitinden sonra sürdürüldü. API (F4-1) ve arayüz (F4-2) F3 ile paralel başladı (ADR-011). F3-5 ve F4-4 incelemeleri sonda tek code-reviewer turunda birleşecek. K2 ve K3 yine kullanıcı onayına sunulacak.
 
 ## Fazlar
 | Faz | Durum | Not |
@@ -11,8 +11,8 @@ Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonr
 | F1 Veri keşfi + pilot seçimi | ✅ | K1 ✅ Menderes (ADR-006, ADR-007) · QA-F1 ✅ (duman testi, ruff, önbellekten aynı CSV'ler) · F1 commit'i atıldı · code-reviewer F1'de atlandı: yalnızca keşif betiği var, tam inceleme F2 sonunda |
 | F1B Başvuru taslağı | 🔄 | F1B-1 ✅ taslak · F1B-2 ✅ kaynak düzeltmeleri · F1B-3 ✅ taslak düzeltmesi · son geçiş 1–2 Kas (pilot ilçe, ekip, form alanları) · başvuru son tarihi 2 Kas 23:59 |
 | F2 Veri hattı | ✅ | F2-1…F2-6, DOC-F2 ✅ · QA-F2 ✅ · REV-F2: Kritik 0, Yüksek 3 → FIX-F2 ✅ · commit'lendi · açık: ATTR-1 (web limiti), backlog'da 10 Orta ve 15 Düşük bulgu |
-| F3 Risk modeli | 🔄 | F3-1 ✅ · F3-2 (skor, kademe, ilk 3 neden, iş paketleri, dışa aktarım) ve F2-5b (FIRMS'in current_asof'a uzatılması) çalışıyor · sonra F3-3 backtest, F3-4 senaryo, F3-5 inceleme · K2: sonuçlar |
-| F4 API + arayüz | ⬜ | K3: demo provası |
+| F3 Risk modeli | 🔄 | F3-1 ✅ · F3-2 (skor, kademe, ilk 3 neden, iş paketleri, dışa aktarım) ve F2-5b (FIRMS'in current_asof'a uzatılması) sürdürüldü · sonra tek risk-modeler oturumunda F3-3 backtest ve F3-4 senaryo · K2: sonuçlar |
+| F4 API + arayüz | 🔄 | F4-1 backend-dev ve F4-2 frontend-dev paralel (sözleşme: ARCHITECTURE.md + ADR-011) · sonra F4-3 QA ve F3–F4 birleşik inceleme · K3: demo provası |
 | F5 Demo cilası + sunum | ⬜ | |
 | F6 Final | ⬜ | 15–16 Kas |
 
@@ -21,13 +21,19 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 ## Aktif görevler
 | ID | Ajan | Durum | Sahip olduğu dosyalar | Rapor |
 |---|---|---|---|---|
-| F3-2 | risk-modeler (yeni oturum; F3-1 bağlamı rapor ve ADR-009'dan) | 🔄 | src/hatkalkani/model/, src/hatkalkani/export/, tests/model/, tests/export/, data/processed/izmir_menderes/risk_*, workorders_*, scripts/run_pipeline.py (`--stage score`), docs/reports/F3-2-skor.md | docs/reports/F3-2-skor.md |
+| F3-34 | risk-modeler (yeni oturum) | 🔄 | src/hatkalkani/model/, tests/model/, scripts/run_pipeline.py, config/risk_weights.yaml, data/processed/izmir_menderes/ altındaki features_*, risk_*, workorders_*, backtest.json, events_2025.geojson, scenario_*; docs/MODEL_CARD.md; docs/reports/F3-3-*.md ve F3-4-*.md; DECISIONS.md'ye yeni ADR (yalnız ekleme) | handoff |
 | F2-5b | data-engineer | 🔄 | src/hatkalkani/ingest/firms.py, tests/ingest/test_firms_weather.py, data/raw/firms/, data/interim/izmir_menderes/firms.parquet, data/raw/MANIFEST.csv | handoff |
+| F4-2 | frontend-dev | ⏸ F3-34 çıktılarını bekliyor | web/, docs/ATTRIBUTIONS.md (yalnız arayüz kütüphaneleri ve altlık satırları), docs/screens/ | handoff |
+| — | (sahipsiz, kimse değiştirmiyor) | — | src/hatkalkani/api/, scripts/serve.py, tests/api/, config/sources.yaml (F4-1 bitti; uçtan uca test için yeniden açılacak) · src/hatkalkani/export/ | — |
 | — | orkestratör | sürekli | docs/STATUS.md, MANUAL_TASKS.md, docs/DECISIONS.md, docs/PLAN.md, config/aoi.yaml, .env.example | — |
 
 ## Biten görevler
 | ID | Ajan | Sonuç | Rapor |
 |---|---|---|---|
+| DOC-README | doc-writer (Haiku 5.5) | README.md'ye şu bölümler eklendi: gereksinimler, hızlı başlangıç (uv sync, .env, `--stage all`, serve, pytest), arayüz, dürüstlük notları ve kaynaklar. Komutlar çalıştırılmadı. Süre ve disk alanı [DOĞRULANACAK]; bunları temiz klon provasında qa-tester ölçecek. scenario ve backtest aşamaları F3-34'ten sonra eklenecek | handoff |
+| F4-1 | backend-dev (Sonnet 5.5) | FastAPI `create_app` ve scripts/serve.py yazıldı. Sözleşme v0.2'nin tüm uç noktaları çalışıyor: `as_of`, `/api/aoi/boundary`, `/api/meta/sources` (config/sources.yaml) ve ek `/api/meta/factors`. Yanıtlar 3–15 ms. Hatalar JSON; hazır olmayan çıktılar 503 dönüyor. CSV'nin UTF-8 BOM'lu olduğu doğrulandı. Dev bağımlılığı olarak httpx eklendi (TestClient için). ruff temiz, tests/api 11 test geçti; 8011 portunda curl ile doğrulandı | handoff |
+| CHM-META | data-scout (Haiku 5.5) | CHM v2 `metadata/<karo>.geojson` dosyalarında her ayak izi için `acq_date` var. Menderes'in 4 karosunda örneklenen tarihler 2016-07-22…2020-02-19; tarihler mozaik, tek bir yıl yok. Tam sayım yapılmadı (46 MB, 20 MB sınırını aşıyor). ADR-008'e düzeltme notu eklendi | docs/reports/CHM-META.md |
+| F3-2 | risk-modeler (Opus 5.5) | Kademeler (iki as_of'ta da aynı): kritik 46 · yüksek 139 · orta 278 · düşük 462; risk 16,5–79,0, medyan 48,7. top_factors, tipik segmente (risk 50) göre Shapley puanı (0–3 öğe). İş paketleri: 2025-05-31'de 72 açıklık (18,5 km), 2026-10-30'da 76 açıklık (18,4 km). Tek ağırlık ±%20 değişince Spearman ≥ 0,995, kritik kümede örtüşme ≥ 0,913 (ADR-010). ruff temiz, pytest 162 geçti; `--stage score` 3,0 sn ve idempotent. Harcama limiti molasından sonra sürdürüldü | docs/reports/F3-2-skor.md |
 | F0-1 | orkestratör | 10 ajan + 6 skill frontmatter'ı geçerli, düzeltme gerekmedi. Kök neden yanlış klasördü: kullanıcı iç içe yapıyı düzleştirdi, proje kökü `Desktop\hatkalkani`; boş iç klasör silindi. `durum` yalnız `/durum` ile çalışır (bilinçli) | — |
 | F0-2 | data-engineer (Sonnet 5.5) | git init + ilk commit (amend sonrası c423a81); uv 0.13.6 kuruldu; `uv sync` tamam; importlar tamam; `uv run pytest -q` → 1 passed; context7 yanıt verdi | docs/reports/F0-2-kurulum.md |
 | F0-3 | qa-tester (Haiku 5.5) | Playwright MCP bağlandı (`mcp__playwright__*` deseni ve Windows'ta `npx` çalışıyor); ekran görüntüsü 28.997 bayt; file:// engelli, data: URL kullanıldı | docs/reports/F0-3-playwright.md |
@@ -59,6 +65,7 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 - yok (30 Eki: `.env.example`'daki gerçek biçimli FIRMS anahtarı şablondan silindi; ilk commit kullanıcı onayıyla `--amend` ile yeniden yazıldı: 87d9e3b → c423a81)
 
 ## İzlenecekler
+- F4-2 ilk tur (31 Eki): 4 sekme, detay çekmecesi, TR/EN ve çevrimdışı yedek çalışıyor. MapLibre 4.7.1 yerel; altlık OpenFreeMap positron. Açılış 182 ms; JS hatası yok; ekran görüntüleri docs/screens/01–06. Senaryo, doğrulama ve olay sekmeleri yalnız mock ile denendi; gerçek veriyle F3-34'ten sonra denenecek. Orkestratörün gözle kontrolünden düzeltilecekler: (1) "Bu haftanın iş paketi" sayaç etiketi yanıltıcı, sayı toplam açıklık sayısı; (2) "Devrilebilecek ağaç: 93" kesin gibi okunuyor, tahmini ağaç kümesi olduğu belirtilmeli.
 - F3-1 bulguları: wind_exposure ≈ TPI (ρ 0,98; yineleme F3-2'de ele alınacak); strike kümelerinin %34'ü 4 m'nin altında; fuel_dryness bahar–sonbahar ρ 0,51; encroachment değerlerinin %47'si sıfır; bant genişlikleri ±%20 değişince ρ ≥ 0,99 (sağlam). FIRMS 2025-09-30'da bittiği için güncel haritada 395 günlük boşluk vardı → F2-5b.
 - **Backtest riski (MAP-1 görsel kontrolü):** 29–30 Haziran 2025 FIRMS kümesi, OSM hatlarına kabaca 2–4 km uzakta (harita ölçeğinden göz kararı). Bildirilen kaynak olan dağıtım hattı OSM'de yok (ADR-007). `buffers_m.event_line_distance` 500 m olduğu için bu olay backtest'te "hat yakını" sayılmayacak; F3-3 görevine ve K2 yorumuna yazılacak. Başvuru ve sunumda da EDAŞ verisinin neden gerektiğini gösteren dürüst bir örnek olarak kullanılabilir.
 - Başvuru son geçişi (pitch-writer): harita görseli docs/pitch/basvuru_harita.png. FIRMS sayıları PITCH_FACTS'e kaynağıyla girmeli (27–30 Haz: dosyada 577 kayıt, ilçe + 1,5 km içinde 249; üç ürünün toplamı, olay sayısı değildir).
@@ -70,7 +77,7 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 - FIRMS anahtarı F2-5'te betikle sınandı ve geçerli çıktı; değeri hiçbir yerde gösterilmedi. Ajan komutlarının `.env`'e doğrudan erişimi izin kuralıyla engelli ve bu beklenen bir durum.
 - ✅ F2-6: S2 güncel penceresi artık `periods.current_asof`'a (2026-10-30) bağlı; gün değişince önbellek bozulmuyor.
 - F3'e devredilecekler (REV-F2): FIRMS ve rüzgâr dosyalarında dönem etiketi yok, `as_of` ile sızıntı testi F3-1'de yazılmalı; UTC ile yerel gün sınırı tanımlanmalı. CHM v2 `metadata/` klasöründe görüntü tarihi var mı, data-scout bakmalı (S3 listesi curl ile alınabilir; web limiti bunu etkilemez). review-F2.md'deki 10 Orta ve 15 Düşük bulgu backlog'da; aralarında EDAŞ'ın Türkçe sütun adları ("GERİLİM") ve OSM yedeğine sessiz geçiş var.
-- REV-F2 sonucu (F3'te dikkate alınacak): CHM'nin uint8 metre olduğu varsayımı değer dağılımıyla (0–32 m) uyumlu, ama çalışma anında doğrulanmıyor. Yaklaşım bandı genişlikleri config'te yer tutucu; chm_meta.json'da `placeholder_unverified` bayrağı var. CHM taban yılı bilinmiyor; MODEL_CARD'a yazılacak.
+- REV-F2 sonucu (F3'te dikkate alınacak): CHM'nin uint8 metre olduğu varsayımı değer dağılımıyla (0–32 m) uyumlu, ama çalışma anında doğrulanmıyor. Yaklaşım bandı genişlikleri config'te yer tutucu; chm_meta.json'da `placeholder_unverified` bayrağı var. CHM görüntü tarihleri 2016–2020 arası, mozaik (CHM-META; ADR-008 düzeltmesi). Segment bazında tarih, F2-5b bittikten sonra CHM-DATE göreviyle eklenecek; MANIFEST çakışmasını önlemek için ondan önce başlamayacak. Ağaç yüksekliği eski görüntüden geldiği için büyüme eksik tahmin edilebilir; bu MODEL_CARD'a yazılacak.
 - ✅ DOC-F2 ve FIX-F2: ATTRIBUTIONS.md ile DATA_SOURCES.md güncel; Overture binaları ODbL-1.0 (Microsoft ML Buildings ve OSM). DEM ve CHM v2 atıf metinleri hâlâ [DOĞRULANMADI]; ATTR-1 web limiti sıfırlanınca yeniden denenecek.
 - ✅ geo-data-sources skill'i DOC-F2'de düzeltildi: FIRMS 5 gün, CHM v2 için chm/ listesi, v1 için acq_date.
 - Sunum dili: 2025 İzmir yangınlarının hat kaynaklı olduğu resmî olarak tespit edilmedi (F1-3). Başvuru ve sunumda "bildirildi / iddia edildi" dili kullanılmalı; 1–2 Kas son geçişinde pitch-writer'a verilecek.

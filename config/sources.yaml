@@ -1,0 +1,41 @@
+# Served by /api/meta/sources. Keep in sync with docs/ATTRIBUTIONS.md.
+# `note` carries items ATTRIBUTIONS marks as unverified; the UI may show it.
+sources:
+  - name: OpenStreetMap
+    license: ODbL 1.0
+    attribution: "© OpenStreetMap contributors"
+    url: https://www.openstreetmap.org/copyright
+  - name: Meta & WRI Canopy Height Maps v2 (dinov3_global_chm_v2_ml3)
+    license: CC BY 4.0
+    attribution: "Meta and World Resources Institute (WRI) - 2024. High Resolution Canopy Height Maps (CHM)."
+    url: https://registry.opendata.aws/dataforgood-fb-forests/
+    note: "v2 görüntü tarihi yok (ADR-008); v1 için ek Maxar satırı v2'de doğrulanmadı."
+  - name: Copernicus Sentinel-2 L2A
+    license: Copernicus Sentinel veri şartları (ücretsiz, açık)
+    attribution: "Contains modified Copernicus Sentinel data 2025, 2026"
+    url: https://earth-search.aws.element84.com/v1
+  - name: Copernicus DEM GLO-30
+    license: Copernicus DEM lisansı; ücretsiz kullanım, atıfla
+    attribution: "ESA/Copernicus"
+    url: https://earth-search.aws.element84.com/v1/collections/cop-dem-glo-30
+    note: "Resmi atıf metni doğrulanmadı."
+  - name: ESA WorldCover 2021 v200
+    license: CC BY 4.0
+    attribution: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"
+    url: https://esa-worldcover.org
+  - name: Overture Maps buildings (release 2026-10-21.0)
+    license: ODbL-1.0
+    attribution: "Overture Maps Foundation (buildings theme; sources incl. OpenStreetMap contributors, Microsoft, Google, Esri)"
+    url: https://docs.overturemaps.org/attribution
+  - name: Open-Meteo
+    license: CC BY 4.0 (ücretsiz API yalnızca ticari olmayan kullanım)
+    attribution: "Weather data by Open-Meteo.com"
+    url: https://open-meteo.com
+  - name: NASA FIRMS (VIIRS_SNPP_SP, VIIRS_NOAA20_SP, MODIS_SP)
+    license: NASA açık veri
+    attribution: "NASA FIRMS open data; cite: NASA FIRMS (LANCE/EOSDIS)"
+    url: https://firms.modaps.eosdis.nasa.gov
+  - name: MapLibre GL JS
+    license: BSD-3-Clause
+    attribution: "MapLibre GL JS"
+    url: https://maplibre.org

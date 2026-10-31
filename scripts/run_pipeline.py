@@ -2,7 +2,8 @@
 
 Usage: ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage ingest``
        ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage features``
-       (``--stage all`` = ingest, MANIFEST check, then features)
+       ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage score``
+       (``--stage all`` = ingest, MANIFEST check, features, then score)
 """
 
 from __future__ import annotations
@@ -137,6 +138,40 @@ def run_features(
     return [{"module": "features", "seconds": dt, "rc": rc, "outputs": outs}]
 
 
+# Score stage (risk-modeler): scores, tiers, top factors, work orders and exports from the
+# cached feature files; never rebuilds features.
+SCORE_MODULE = "hatkalkani.model.run"
+
+
+def score_command(aoi: str, dates: list[str]) -> list[str]:
+    return [sys.executable, "-m", SCORE_MODULE, "--aoi", aoi, "--as-of", *dates]
+
+
+def run_score(
+    aoi: str,
+    runner: Callable[[list[str]], int] | None = None,
+    log: Callable[[str], None] = print,
+    root: Path | None = None,
+) -> list[dict]:
+    base = root or ROOT
+    dates = feature_dates(base)
+    proc = base / PROC.format(aoi=aoi)
+    missing = [proc / f"features_{d}.parquet" for d in dates
+               if not (proc / f"features_{d}.parquet").exists()]
+    if missing:
+        shown = ", ".join(p.relative_to(base).as_posix() for p in missing)
+        raise SystemExit(f"missing feature files: {shown}; run --stage features first")
+    t0 = time.time()
+    rc = (runner or _subprocess_runner)(score_command(aoi, dates))
+    dt = time.time() - t0
+    outs = [proc / f"risk_{d}.parquet" for d in dates]
+    log(f"[score] rc={rc} {dt:.1f}s -> "
+        + ", ".join(o.relative_to(base).as_posix() for o in outs) + " (+ geojson, workorders)")
+    if rc != 0:
+        raise SystemExit(f"stage 'score' failed (rc={rc})")
+    return [{"module": "score", "seconds": dt, "rc": rc, "outputs": outs}]
+
+
 def validate_manifest(root: Path = ROOT) -> list[str]:
     """Return a list of problems (empty list means OK)."""
     from hatkalkani.ingest import common
@@ -184,7 +219,8 @@ def _check_manifest() -> None:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--aoi", required=True)
-    ap.add_argument("--stage", default="ingest", choices=["ingest", "features", "all"])
+    ap.add_argument("--stage", default="ingest",
+                    choices=["ingest", "features", "score", "all"])
     ap.add_argument("--only", nargs="+", metavar="MODULE", help=f"subset of {MODULES}")
     ap.add_argument("--force", action="store_true", help="delete stage outputs and recompute")
     args = ap.parse_args(argv)
@@ -194,13 +230,16 @@ def main(argv: list[str] | None = None) -> None:
         _print_table(results, t0)
         _check_manifest()
         return
-    if args.stage == "features" and (args.only or args.force):
+    if args.stage in ("features", "score") and (args.only or args.force):
         raise SystemExit("--only/--force apply to the ingest stage only")
     results = []
     if args.stage == "all":
         results += run_ingest(args.aoi, args.only, args.force)
         _check_manifest()
-    results += run_features(args.aoi)
+    if args.stage in ("features", "all"):
+        results += run_features(args.aoi)
+    if args.stage in ("score", "all"):
+        results += run_score(args.aoi)
     _print_table(results, t0)
 
 

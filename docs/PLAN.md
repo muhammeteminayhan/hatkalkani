@@ -19,6 +19,8 @@ Orkestratör bu planı yürütür; ilerleme docs/STATUS.md'ye yazılır. Tarihle
 
 6 Kasım'da finalist olunamazsa F4'ten sonrası takımın kararıyla devam eder.
 
+**31 Eki güncellemesi (kullanıcı yönü):** F3 ve F4, 1 Kas sabahına kadar çalışan prototip hedefiyle sıkıştırıldı. API ve arayüz F3-3/F3-4 ile paralel yazılıyor (ADR-011). F3-5 ve F4-4 incelemeleri tek code-reviewer turunda birleşiyor. Sunum ve başvuru işleri (F1B son geçiş, F5-3) sonraya kaldı; K2 ve K3 yine kullanıcı onayına sunulur.
+
 ---
 
 ## F0 — Kurulum denetimi
