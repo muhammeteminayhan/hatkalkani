@@ -11,7 +11,7 @@ Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonr
 | F1 Veri keşfi + pilot seçimi | ✅ | K1 ✅ Menderes (ADR-006, ADR-007) · QA-F1 ✅ (duman testi, ruff, önbellekten aynı CSV'ler) · F1 commit'i atıldı · code-reviewer F1'de atlandı: yalnızca keşif betiği var, tam inceleme F2 sonunda |
 | F1B Başvuru taslağı | 🔄 | F1B-1 ✅ taslak · F1B-2 ✅ kaynak düzeltmeleri · F1B-3 ✅ taslak düzeltmesi · son geçiş 1–2 Kas (pilot ilçe, ekip, form alanları) · başvuru son tarihi 2 Kas 23:59 |
 | F2 Veri hattı | ✅ | F2-1…F2-6, DOC-F2 ✅ · QA-F2 ✅ · REV-F2: Kritik 0, Yüksek 3 → FIX-F2 ✅ · commit'lendi · açık: ATTR-1 (web limiti), backlog'da 10 Orta ve 15 Düşük bulgu |
-| F3 Risk modeli | 🔄 | F3-1 (özellikler, `as_of`, sızıntı testi) çalışıyor · sonra F3-2…F3-4, F3-5 inceleme · K2: sonuçlar |
+| F3 Risk modeli | 🔄 | F3-1 ✅ · F3-2 (skor, kademe, ilk 3 neden, iş paketleri, dışa aktarım) ve F2-5b (FIRMS'in current_asof'a uzatılması) çalışıyor · sonra F3-3 backtest, F3-4 senaryo, F3-5 inceleme · K2: sonuçlar |
 | F4 API + arayüz | ⬜ | K3: demo provası |
 | F5 Demo cilası + sunum | ⬜ | |
 | F6 Final | ⬜ | 15–16 Kas |
@@ -21,7 +21,8 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 ## Aktif görevler
 | ID | Ajan | Durum | Sahip olduğu dosyalar | Rapor |
 |---|---|---|---|---|
-| F3-1 | risk-modeler | 🔄 | src/hatkalkani/features/, tests/features/, data/processed/izmir_menderes/features_*.parquet, scripts/run_pipeline.py (yalnızca `--stage features`), docs/reports/F3-1-ozellikler.md | docs/reports/F3-1-ozellikler.md |
+| F3-2 | risk-modeler (yeni oturum; F3-1 bağlamı rapor ve ADR-009'dan) | 🔄 | src/hatkalkani/model/, src/hatkalkani/export/, tests/model/, tests/export/, data/processed/izmir_menderes/risk_*, workorders_*, scripts/run_pipeline.py (`--stage score`), docs/reports/F3-2-skor.md | docs/reports/F3-2-skor.md |
+| F2-5b | data-engineer | 🔄 | src/hatkalkani/ingest/firms.py, tests/ingest/test_firms_weather.py, data/raw/firms/, data/interim/izmir_menderes/firms.parquet, data/raw/MANIFEST.csv | handoff |
 | — | orkestratör | sürekli | docs/STATUS.md, MANUAL_TASKS.md, docs/DECISIONS.md, docs/PLAN.md, config/aoi.yaml, .env.example | — |
 
 ## Biten görevler
@@ -34,6 +35,7 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 | F1B-1 | pitch-writer (Sonnet 5.5) | docs/BASVURU_TASLAK.md (10 bölüm, özet 140 kelime, elle sayıldı), docs/pitch/EKIP.md şablonu, PITCH_FACTS #21–#23. CO2e katsayısı ve resmî form alanları eksik | handoff |
 | F1-3 | data-scout (Haiku 5.5) | 2025 Menderes (29.06), Çeşme (02.07) ve Ödemiş (02.07) yangınlarının hat kaynaklı olduğu yalnızca medya ve valilik aktarımında var; resmî ya da yargısal tespit yok (savcılık 15.08.2026: soruşturmaya yer yok). 2024–25 büyük yangın: Menderes 2, Çeşme 1, Ödemiş 1. PITCH #20 desteklenmiyor; #2–#4 OGM oranlarıyla çelişiyor → F1B-2'ye iletildi | docs/reports/F1-3-vakalar.md |
 | F1-1 | data-scout (Haiku 5.5) | 5 aday ölçüldü: Menderes, Çeşme, Ödemiş ve ek olarak Seferihisar, Torbalı. power=line km: 204 / 179 / 143 / 84 / 324. Bunlar üst sınır, çünkü length() sınırı aşan hattın tamamını sayıyor. minor_line yalnız 0–1,7 km (Torbalı 16); direk 0–31. OSM'ye göre öneri: Menderes, sonra Çeşme. Yüzölçümü Vikipedi'den | docs/reports/F1-1-aday-ilceler.md |
+| F3-1 | risk-modeler (Opus 5.5) | 9 faktörlük kayıt: vegetation_encroachment, strike_trees, fuel_dryness, wind_exposure, fuel_continuity, slope, wui_exposure, fire_history, asset_condition (birim, kaynak, as_of kuralı ve yönüyle). İki as_of için 925'er satır. NaN yalnızca belgeli yerlerde: bir segmentte all_water, asset_condition'ın tamamı (veri yok). Sızıntı testi geçti (`TemporalLeakageError`); CHM dtype/aralığı çalışma anında doğrulanıyor. ADR-009 yazıldı. ruff temiz, pytest 121 geçti; `--stage features` 13,6 sn ve idempotent | docs/reports/F3-1-ozellikler.md |
 | MAP-1 | data-engineer (Sonnet 5.5) | docs/pitch/basvuru_harita.png (1950×1380, 150 dpi): rölyef zemin, CHM p90 renkli 925 segment, 27–30 Haz 2025 FIRMS (ilçe + 1,5 km içinde 249; dosyada 577), "ön veri / risk puanı hesaplanmamıştır" notu ve atıflar. Betik scripts/make_application_map.py; matplotlib 3.11.2 eklendi. Orkestratör görseli iki kez gözle kontrol etti | handoff |
 | FIX-F2 | data-engineer (Sonnet 5.5) | Y1: CHM raster ve istatistik önbelleği ayrıldı; `stats_cache_key` tüm parametreleri içeriyor. Y2: FIRMS yolu `data/raw/firms/<aoi>/<kaynak>_<yıl>.csv` ve `.meta.json` eki; 33 dosya indirilmeden taşındı. Y3: lisans kayıt bazında ham veriden okunuyor (ODbL-1.0); ATTRIBUTIONS düzeltildi. Her biri için regresyon testi var. ruff temiz, pytest geçti; ingest 25 sn, indirme yok; 4 parquet'in sha256'sı değişmedi | handoff |
 | REV-F2 | code-reviewer (Opus 5.5) | Kritik yok, Yüksek 3: Y1 CHM önbellek anahtarında bant ve strike parametreleri yok; Y2 FIRMS yıl dosyaları AOI'ye ve döneme bağlı değil; Y3 Overture bina lisansı yanlış (CDLA değil, ODbL-1.0) → FIX-F2. Orta 10, Düşük 15 → backlog. Geçenler: FIRMS anahtarı maskeli (33/33), CRS, birimler, segmentasyon, bellek. Kısmi: CHM uint8 metre varsayımı çalışma anında doğrulanmıyor; FIRMS ve rüzgârda dönem etiketi yok; CHM v2'de tarih olmadığı doğrulanmadı (metadata/ incelenmedi) | docs/reports/review-F2.md |
@@ -57,6 +59,7 @@ Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 - yok (30 Eki: `.env.example`'daki gerçek biçimli FIRMS anahtarı şablondan silindi; ilk commit kullanıcı onayıyla `--amend` ile yeniden yazıldı: 87d9e3b → c423a81)
 
 ## İzlenecekler
+- F3-1 bulguları: wind_exposure ≈ TPI (ρ 0,98; yineleme F3-2'de ele alınacak); strike kümelerinin %34'ü 4 m'nin altında; fuel_dryness bahar–sonbahar ρ 0,51; encroachment değerlerinin %47'si sıfır; bant genişlikleri ±%20 değişince ρ ≥ 0,99 (sağlam). FIRMS 2025-09-30'da bittiği için güncel haritada 395 günlük boşluk vardı → F2-5b.
 - **Backtest riski (MAP-1 görsel kontrolü):** 29–30 Haziran 2025 FIRMS kümesi, OSM hatlarına kabaca 2–4 km uzakta (harita ölçeğinden göz kararı). Bildirilen kaynak olan dağıtım hattı OSM'de yok (ADR-007). `buffers_m.event_line_distance` 500 m olduğu için bu olay backtest'te "hat yakını" sayılmayacak; F3-3 görevine ve K2 yorumuna yazılacak. Başvuru ve sunumda da EDAŞ verisinin neden gerektiğini gösteren dürüst bir örnek olarak kullanılabilir.
 - Başvuru son geçişi (pitch-writer): harita görseli docs/pitch/basvuru_harita.png. FIRMS sayıları PITCH_FACTS'e kaynağıyla girmeli (27–30 Haz: dosyada 577 kayıt, ilçe + 1,5 km içinde 249; üç ürünün toplamı, olay sayısı değildir).
 - **Ana veri riski:** OSM'de orta gerilim dağıtım hatları neredeyse yok; aday ilçelerde minor_line 0–16 km, direk 0–31. Ölçülen power=line uzunluğu az sayıda uzun way'den geliyor ve büyük olasılıkla iletim hatları (gerilim dağılımı F1-1b'de). Müşteri EDAŞ olduğu için hat verisi stratejisi K1'de kullanıcıya ayrı karar olarak sunulacak (EDAŞ verisi: MANUAL 15).

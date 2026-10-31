@@ -1,6 +1,8 @@
 """Run the HatKalkani pipeline stages.
 
 Usage: ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage ingest``
+       ``uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage features``
+       (``--stage all`` = ingest, MANIFEST check, then features)
 """
 
 from __future__ import annotations
@@ -35,6 +37,13 @@ INGEST_STAGES: list[tuple[str, list[str]]] = [
     ("weather", [INTERIM + "wind_hourly.parquet"]),
 ]
 MODULES = [m for m, _ in INGEST_STAGES]
+# Feature stage (risk-modeler): one process builds every as_of date of config periods.
+FEATURE_MODULE = "hatkalkani.features.build"
+FEATURE_INPUTS = [PROC + "segments.parquet", PROC + "boundary.parquet"] + [
+    INTERIM + n for n in (
+        "chm_corridor.tif", "s2_meta.json", "worldcover.tif", "dem_slope.tif", "dem_tpi.tif",
+        "buildings.parquet", "firms.parquet", "wind_hourly.parquet")
+]
 
 
 def stage_command(module: str, aoi: str) -> list[str]:
@@ -83,6 +92,51 @@ def run_ingest(
     return results
 
 
+def feature_dates(root: Path | None = None) -> list[str]:
+    """as_of dates of the feature stage: periods.backtest_asof and periods.current_asof."""
+    import yaml
+
+    cfg = yaml.safe_load(((root or ROOT) / "config" / "aoi.yaml").read_text(encoding="utf-8"))
+    p = cfg["periods"]
+    dates = [str(p["backtest_asof"])]
+    if p.get("current_asof"):
+        dates.append(str(p["current_asof"]))
+    return list(dict.fromkeys(dates))
+
+
+def features_command(aoi: str, dates: list[str]) -> list[str]:
+    return [sys.executable, "-m", FEATURE_MODULE, "--aoi", aoi, "--as-of", *dates]
+
+
+def missing_feature_inputs(aoi: str, root: Path | None = None) -> list[Path]:
+    base = root or ROOT
+    return [base / f.format(aoi=aoi) for f in FEATURE_INPUTS
+            if not (base / f.format(aoi=aoi)).exists()]
+
+
+def run_features(
+    aoi: str,
+    runner: Callable[[list[str]], int] | None = None,
+    log: Callable[[str], None] = print,
+    root: Path | None = None,
+) -> list[dict]:
+    base = root or ROOT
+    missing = missing_feature_inputs(aoi, base)
+    if missing:
+        shown = ", ".join(p.relative_to(base).as_posix() for p in missing)
+        raise SystemExit(f"missing ingest outputs: {shown}; run --stage ingest first")
+    dates = feature_dates(base)
+    t0 = time.time()
+    rc = (runner or _subprocess_runner)(features_command(aoi, dates))
+    dt = time.time() - t0
+    outs = [base / PROC.format(aoi=aoi) / f"features_{d}.parquet" for d in dates]
+    log(f"[features] rc={rc} {dt:.1f}s -> "
+        + ", ".join(o.relative_to(base).as_posix() for o in outs))
+    if rc != 0:
+        raise SystemExit(f"stage 'features' failed (rc={rc})")
+    return [{"module": "features", "seconds": dt, "rc": rc, "outputs": outs}]
+
+
 def validate_manifest(root: Path = ROOT) -> list[str]:
     """Return a list of problems (empty list means OK)."""
     from hatkalkani.ingest import common
@@ -110,19 +164,14 @@ def validate_manifest(root: Path = ROOT) -> list[str]:
     return problems
 
 
-def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--aoi", required=True)
-    ap.add_argument("--stage", default="ingest", choices=["ingest"])
-    ap.add_argument("--only", nargs="+", metavar="MODULE", help=f"subset of {MODULES}")
-    ap.add_argument("--force", action="store_true", help="delete stage outputs and recompute")
-    args = ap.parse_args(argv)
-    t0 = time.time()
-    results = run_ingest(args.aoi, args.only, args.force)
+def _print_table(results: list[dict], t0: float) -> None:
     print(f"{'module':<12}{'seconds':>9}")
     for r in results:
         print(f"{r['module']:<12}{r['seconds']:>9.1f}")
     print(f"{'total':<12}{time.time() - t0:>9.1f}")
+
+
+def _check_manifest() -> None:
     problems = validate_manifest()
     if problems:
         print(f"MANIFEST validation FAILED ({len(problems)}):")
@@ -130,6 +179,29 @@ def main(argv: list[str] | None = None) -> None:
             print("  -", p)
         raise SystemExit(1)
     print("MANIFEST validation OK")
+
+
+def main(argv: list[str] | None = None) -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--aoi", required=True)
+    ap.add_argument("--stage", default="ingest", choices=["ingest", "features", "all"])
+    ap.add_argument("--only", nargs="+", metavar="MODULE", help=f"subset of {MODULES}")
+    ap.add_argument("--force", action="store_true", help="delete stage outputs and recompute")
+    args = ap.parse_args(argv)
+    t0 = time.time()
+    if args.stage == "ingest":
+        results = run_ingest(args.aoi, args.only, args.force)
+        _print_table(results, t0)
+        _check_manifest()
+        return
+    if args.stage == "features" and (args.only or args.force):
+        raise SystemExit("--only/--force apply to the ingest stage only")
+    results = []
+    if args.stage == "all":
+        results += run_ingest(args.aoi, args.only, args.force)
+        _check_manifest()
+    results += run_features(args.aoi)
+    _print_table(results, t0)
 
 
 if __name__ == "__main__":

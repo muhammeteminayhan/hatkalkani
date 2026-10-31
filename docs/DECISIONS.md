@@ -59,3 +59,20 @@ Sonuçlar / ödünleşimler: …
 - **Bağlam:** CHM v1 karoları şerit bloklu (65536×1); bu yüzden ±30 m koridoru okumak çok veri çekiyor. v2 karoları 512 px döşemeli COG ve model daha yeni.
 - **Karar:** Koridor istatistikleri v2'den (`dinov3_global_chm_v2_ml3`) çıkarılır: 4 karo, ≈8 MB pencereli okuma.
 - **Ödünleşimler:** v2'de görüntü tarihi yok. v1 tarihleri (Menderes için 2016-07-22..2020-02-19) yalnızca referans. MODEL_CARD'a "CHM taban yılı bilinmiyor" yazılır. Piksel değerinin uint8 metre olduğu varsayımı F2 incelemesinde doğrulanır.
+
+## ADR-009 — Özellik katmanı: as_of kuralı ve spec'te açık kalan tanımlar  (2026-10-31, risk-modeler — F3-1)
+- **Bağlam:** Spec §2 as_of sonrası veriyi yasaklıyor. Ancak gün sınırını (UTC mi yerel mi), FIRMS geçmiş penceresinin sonunu, S2 kompozit seçimini ve bazı hesap ayrıntılarını tanımlamıyor (REV-F2: O3, O10, D1, D5).
+- **Karar:**
+  1. **Gün sınırı:** as_of, Europe/Istanbul yerel takvim günüdür ve o gün dahildir. Kesim (hariç) as_of+1 günü 00:00 yerel saattir; 2016'dan beri bu, as_of günü 21:00 UTC'ye denk gelir. Zaman karşılaştırmaları saat dilimli yapılır, saat dilimsiz damga reddedilir. Aynı tanım F3-3 olaylarında ve F3-4 senaryo gününde de kullanılır.
+  2. **fire_history:** Pencere, `periods.firms_history[0]` yerel gün başından as_of kesimine kadardır. `firms_history[1]` pencere sonu olarak kullanılmaz: spec "as_of'tan önceki tespitler" diyor ve güncel harita 2025 sezonunu geçmiş saymalı. Yalnız VIIRS kullanılır (S-NPP ve NOAA-20; MODIS dışarıda). Her (yerel gün, 375 m hücre) için tek tespit sayılır. Yoğunluk quartic çekirdekle (bant genişliği `buffers_m.history_kernel`) segment orta noktasında hesaplanır; birim hücre-gün/km².
+  3. **fuel_dryness:** Penceresi as_of günü ya da öncesinde biten ve tüm sahneleri kesimden önce olan en son S2 kompoziti seçilir. Sahne tarihlerini kanıtlamak için `s2_meta.json` zorunludur. WorldCover'da su (80) olan pikselle çakışan S2 pikselleri dışlanır (D1). Ters yüzdelik F3-2'de alınır (`direction=lower`).
+  4. **wind_exposure:** Yalnız `wind_climatology_summers` yıllarının Haziran–Eylül saatleri (yerel takvim) ve kesimden önceki kayıtlar kullanılır. Yinelenen Open-Meteo hücreleri (lat, lon) ile birleştirilir (D5). Her segment en yakın hücrenin hamle p95 değerini alır. Çarpan 0,5 + segment TPI'sinin AOI içindeki TPI piksellerine göre orta-sıra yüzdeliğidir (0,5–1,5).
+  5. **Geometri:** Spec'te "±" ile verilen ölçüler (dryness, slope, CHM) düz uçlu koridor, "tampon" denenler (fuel, wui) yuvarlak tampon olarak uygulanır.
+  6. **Statik katmanlar:** CHM, WorldCover 2021, DEM, Overture binaları ve OSM hatları as_of ile filtrelenemez; zaman durumları metaveride ve F3-1 raporunda yazılır. `asset_condition` için veri yok; sütun tamamen NaN ve `unavailable` olarak işaretli.
+  7. **Çalışma anı korumaları:** Zamana göre filtrelenen her faktör `max_time_used_utc` bildirir; bu değer kesimi aşarsa build `TemporalLeakageError` ile durur. Nedeni yazılmamış bir NaN da build'i durdurur.
+- **Ödünleşimler:**
+  - VIIRS'le sınırlamak ve tekilleştirmek, NOAA-20'nin 2018 öncesinde olmamasından gelen zaman dengesizliğini azaltır. Ama MODIS'in yakaladığı bazı küçük yangınlar kaçabilir.
+  - Su maskesi kıyıdaki karışık pikselleri de dışlar.
+  - TPI yüzdeliği AOI'ye görelidir; başka bir AOI'de çarpanlar yeniden ölçeklenir.
+  - Spec sabitleri (Haz–Eyl, p95, 0,5–1,5, 375 m, WorldCover sınıfları) şimdilik kodda adlandırılmış sabitlerdir. Config'e taşınmaları orkestratör onayına bağlıdır.
+  - Ayrıntı ve sayılar: docs/reports/F3-1-ozellikler.md.
