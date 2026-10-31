@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from .store import TIERS, AsOfData, Store, chm_note
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("hatkalkani.api")
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _MEDIA = {
@@ -41,13 +43,13 @@ def _asof(store: Store, as_of: str | None) -> AsOfData:
             503,
             "Risk verisi bulunamadı.",
             f"{store.aoi_dir} altında risk_<as_of>.parquet üretmek için "
-            f"`scripts/run_pipeline.py --aoi {store.aoi_id} --stage model` çalıştırın.",
+            f"`scripts/run_pipeline.py --aoi {store.aoi_id} --stage score` çalıştırın.",
         )
+    if as_of and not _DATE_RE.match(as_of):
+        raise _err(422, "as_of YYYY-MM-DD biçiminde olmalı.", f"Mevcut tarihler: {store.as_ofs}")
     key = as_of or store.default_as_of
     if key is None or key not in store.by_asof:
         raise _err(404, f"as_of={key} için veri yok.", f"Mevcut tarihler: {store.as_ofs}")
-    if as_of and not _DATE_RE.match(as_of):
-        raise _err(422, "as_of YYYY-MM-DD biçiminde olmalı.", f"Mevcut tarihler: {store.as_ofs}")
     return store.by_asof[key]
 
 
@@ -215,10 +217,12 @@ def scenario_dates(request: Request) -> Any:
 def scenario(
     request: Request,
     date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    gust_kmh: float = Query(50, ge=0, le=300),
-    min_tier: str = Query("yuksek"),
+    gust_kmh: float | None = Query(None, ge=0, le=300),
+    min_tier: str | None = Query(None),
 ) -> Any:
     s = _store(request)
+    gust_kmh = s.scenario_gust_kmh if gust_kmh is None else gust_kmh
+    min_tier = min_tier or s.scenario_min_tier
     if min_tier not in TIERS:
         raise _err(422, f"Bilinmeyen kademe: {min_tier}", f"Geçerli: {list(TIERS)}")
     try:  # imported per request: the module arrives later (F3-4)
@@ -228,8 +232,14 @@ def scenario(
         raise _not_ready(
             "Senaryo modülü henüz hazır değil.", "The scenario module is not available yet."
         ) from None
+    data_error = getattr(mod, "ScenarioDataError", ())
     try:
         return compute(s.aoi_id, date, gust_kmh, min_tier)
+    except data_error as exc:
+        log.warning("scenario data error: %s", exc)
+        raise _not_ready(
+            "Senaryo verisi okunamadı veya geçersiz.", "Scenario data is missing or invalid."
+        ) from exc
     except FileNotFoundError:
         raise _not_ready(
             "Senaryo girdileri henüz hesaplanmadı.", "Scenario inputs have not been computed yet."
@@ -246,10 +256,23 @@ def backtest(request: Request) -> Any:
     )
 
 
+def _events_file(s: Store) -> str:
+    """events_<year>.geojson, year taken from backtest.json `season` (glob as fallback)."""
+    try:
+        season = json.loads((s.aoi_dir / "backtest.json").read_text(encoding="utf-8")).get("season")
+    except (OSError, ValueError):
+        season = None
+    if isinstance(season, str) and re.match(r"^\d{4}", season):
+        return f"events_{season[:4]}.geojson"
+    found = sorted(p.name for p in s.aoi_dir.glob("events_*.geojson")) if s.aoi_dir.exists() else []
+    return found[0] if found else "events_unknown.geojson"
+
+
 @router.get("/backtest/events")
 def backtest_events(request: Request) -> Any:
+    s = _store(request)
     return _processed_json(
-        _store(request), "events_2025.geojson",
+        s, _events_file(s),
         "Olay verisi henüz hesaplanmadı.", "Event data has not been computed yet.",
     )
 

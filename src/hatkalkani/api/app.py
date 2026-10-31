@@ -41,7 +41,9 @@ def _warm_scenario(store: Store) -> None:
         dates = json.loads(dates_file.read_text(encoding="utf-8"))
         compute = importlib.import_module("hatkalkani.model.scenario").compute_scenario
         t = time.perf_counter()
-        compute(store.aoi_id, str(dates[0]["date"]), 50.0, "yuksek")
+        compute(
+            store.aoi_id, str(dates[0]["date"]), store.scenario_gust_kmh, store.scenario_min_tier
+        )
         log.info("scenario warm-up done in %.0f ms", (time.perf_counter() - t) * 1000)
     except Exception as exc:  # warm-up must never stop the server
         log.warning("scenario warm-up skipped: %s: %s", type(exc).__name__, exc)

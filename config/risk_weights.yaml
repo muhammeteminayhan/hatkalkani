@@ -39,7 +39,7 @@ scenario:
   gust_threshold_kmh: 50     # varsayım; duyarlılık analizi ±10 km/s
   risk_threshold_tier: yuksek
 
-backtest:                    # F3-3 geriye dönük test (ADR-013); sonuç görülmeden önce kaydedildi
+backtest:                    # F3-3 geriye dönük test (ADR-013); protokol sonuçtan önce yazıldı, bağımsız ön kayıt değil
   cluster_distance_m: 1000   # spec §5: ~1 km (tek bağlantılı uzay-zaman kümeleme)
   cluster_gap_days: 2        # spec §5: 2 gün (yerel takvim günü farkı, dahil)
   top_shares: [0.10, 0.20]   # üst %10 ve üst %20

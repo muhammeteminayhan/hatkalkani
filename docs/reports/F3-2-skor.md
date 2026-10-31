@@ -1,5 +1,7 @@
 # F3-2: Segment risk skoru, kademeler, ilk 3 neden ve iş paketleri
 
+> **Not (31 Eki, REV-F3F4 D8):** Skor, F2-5b FIRMS uzatması, FIRMS `type` filtresi ve yeni etiketle (F3-34) yeniden üretildi. Bu yüzden bu rapordaki örnek iş paketi değerleri ve "Rüzgâra açıklık" etiketi eskidir. Güncel etiket "Rüzgâra topoğrafik açıklık"; güncel değerler `risk_<as_of>.meta.json` dosyalarında, F3-3 ve F3-4 raporlarında. Kademe dağılımı değişmedi.
+
 - **Model:** claude-opus-5-5 (Opus 5.5), risk-modeler
 - **Tarih:** 2026-10-31
 - **AOI:** `izmir_menderes`: 925 segment, 17 hat (921 hv, 4 mv). Hatların çoğu ≥154 kV iletim hattıdır; dağıtım şebekesi için sonuç iddia edilmez (ADR-007).

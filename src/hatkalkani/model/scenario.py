@@ -300,10 +300,12 @@ def _notes(voltage_class: np.ndarray, power: np.ndarray, length: np.ndarray,
     hv = float(length[voltage_class == "ge154kv"].sum()) / total
     line = float(length[power == "line"].sum()) / total
     line_tr = f"{100 * line:.1f}".replace(".", ",")  # Turkish decimal comma
+    # REV-F3F4 D6: no suffix after a percentage (its form depends on how the number is
+    # read aloud: %66'sı, %99,5'i); the sentence states each share with "payı"
     tr = (
         "Vekil hesap, gerçek kesinti planı değildir. "
-        f"OSM hatlarının çoğu iletim hattıdır: havai hat uzunluğunun %{line_tr}'i "
-        f"power=line etiketli, %{100 * hv:.0f}'si ≥154 kV etiketli. Gerçek önleyici kesinti "
+        "OSM hatlarının çoğu iletim hattıdır: havai hat uzunluğunda power=line etiketinin "
+        f"payı %{line_tr}, ≥154 kV etiketinin payı %{100 * hv:.0f}. Gerçek önleyici kesinti "
         "birimi EDAŞ'ın dağıtım fideri ve anahtarlanabilir bölümüdür; burada aday segment "
         "içeren OSM hat yolu (way) bütünüyle kesilmiş sayılır. Bina sayısı, kesilen "
         f"hatlara {building_m:.0f} m içindeki yapı sayısıdır (Overture) ve etkilenen müşteri "

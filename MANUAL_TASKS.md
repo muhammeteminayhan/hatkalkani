@@ -33,7 +33,7 @@ Durum: ⬜ bekliyor · ✅ tamam
 | 10b | Başvuru taslağını gözden geçirin | [VARSAYIM] etiketli etki varsayımları, yapay zekâ beyanı ve "insan doğrulaması" notlu cümleler onayınızı ister | docs/BASVURU_TASLAK.md'yi okuyun; onaylamadıklarınızı not edin. Taslak 30 Eki'de düzeltildi (F1B-3). Özellikle şu varsayımlara bakın: kapsama %10 / %30 / %50, kaçınma %1 / %3 / %5 ve 2021 için verilen %20–25 hat payının 2025'e uygulanması | 1 Kas |
 | 11 | Başvuruyu gönderin | Yalnızca takım yapabilir | T3 KYS: takım + danışman + dil; metin docs/BASVURU_TASLAK.md'de | **2 Kas 23:59** |
 | 12 | Yönetmelik mesafelerini doğrulayın | Hukuki ve teknik iddia, insan onayı ister | data-scout'un docs/REGULATION_NOTES.md'ye aktardığı tabloyu resmi metinle karşılaştırın; doğruysa "DOĞRULANDI" yazın. Ekipte elektrik mühendisi yoksa danışmana sorun. *30 Eki (F1-4): ajan resmî metne erişemedi (mevzuat.gov.tr 404); Çizelge-7 ve 8 iki ikincil kopyadan aktarıldı. EPDK 2026–2030 bakım/budama kararının künyesi (karar no, tarih, Resmî Gazete) de bulunamadı; EPDK sitesinden bakılması gerekiyor* | 3 Kas |
-| 13 | K2: risk sonuçlarını gözden geçirin | Ağırlık veya eşik değişikliği yalnız skoru yeniden üretir | Orkestratör kademe dağılımını, lift'i, taban çizgilerini, 3 iş paketini ve senaryoyu seçenekli soruyla sunacak | 1 Kas sabahı (31 Eki kararıyla öne alındı) |
+| 13 | K2: risk sonuçlarını gözden geçirin | — | ✅ 31 Eki: model v0.1 bu sonuçlarla onaylandı; çok yıllı backtest eklenmedi (ADR-014) | 1 Kas sabahı |
 | 14 | K3: demoyu kendiniz deneyin | — | `uv run python scripts/serve.py` → http://127.0.0.1:8000 (komut F4-1 bitince geçerli) | 1 Kas sabahı |
 
 ## İsteğe bağlı (değeri yüksek)

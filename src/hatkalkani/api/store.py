@@ -24,8 +24,10 @@ log = logging.getLogger("hatkalkani.api")
 ROOT = Path(__file__).resolve().parents[3]
 TIERS = ("kritik", "yuksek", "orta", "dusuk")
 _RISK_RE = re.compile(r"^risk_(\d{4}-\d{2}-\d{2})\.parquet$")
-CHM_YEAR_NOTE_TR = "CHM v2 için görüntü tarihi yok (ADR-008); taban yılı bilinmiyor."
-CHM_YEAR_NOTE_EN = "CHM v2 has no acquisition date (ADR-008); baseline year unknown."
+CHM_YEAR_NOTE_TR = "Bu parça için ağaç yüksekliği görüntü tarihi bulunamadı."
+CHM_YEAR_NOTE_EN = "No tree-height imagery date was found for this segment."
+DEFAULT_GUST_KMH = 50.0  # used only if config/risk_weights.yaml has no scenario block
+DEFAULT_MIN_TIER = "yuksek"
 
 
 def plain(value: Any) -> Any:
@@ -115,6 +117,8 @@ class Store:
     labels: dict[str, dict[str, str]] = field(default_factory=dict)
     default_as_of: str | None = None
     sources: list[dict[str, Any]] = field(default_factory=list)
+    scenario_gust_kmh: float = DEFAULT_GUST_KMH
+    scenario_min_tier: str = DEFAULT_MIN_TIER
 
     @property
     def aoi_dir(self) -> Path:
@@ -216,6 +220,9 @@ def load_store(data_root: Path, aoi_id: str, config_dir: Path) -> Store:
     aoi_dir = store.aoi_dir
     cfg = _read_yaml(config_dir / "aoi.yaml")
     store.sources = load_sources(config_dir / "sources.yaml")
+    scen = _read_yaml(config_dir / "risk_weights.yaml").get("scenario") or {}
+    store.scenario_gust_kmh = float(scen.get("gust_threshold_kmh", DEFAULT_GUST_KMH))
+    store.scenario_min_tier = str(scen.get("risk_threshold_tier", DEFAULT_MIN_TIER))
 
     store.name = aoi_id
     for cand in cfg.get("candidates", []) or []:

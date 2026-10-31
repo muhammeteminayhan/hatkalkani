@@ -51,7 +51,7 @@ select = ["E", "F", "I", "B", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q -m 'not network'"
+addopts = "-m 'not network'"
 markers = [
     "network: ag erisimi gerektiren testler (varsayilan calistirmada atlanir)",
 ]

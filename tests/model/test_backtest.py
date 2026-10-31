@@ -7,19 +7,53 @@ leakage guarantee: season detections create events but never move the as_of rank
 
 from __future__ import annotations
 
+import csv
 import json
+import re
 from datetime import date, datetime
 
 import numpy as np
 import pandas as pd
 import pytest
+from scipy import stats
 from synth import AOI, AS_OF, BASE_FIRMS, firms_frame, midpoint
 
+from hatkalkani.features.asof import AsOf
+from hatkalkani.ingest.common import MANIFEST_COLUMNS
 from hatkalkani.model import backtest as bt
 from hatkalkani.model.run import read_risk
 
 EVENT_PROPS = {"event_id", "start_date", "end_date", "n_detections", "dist_to_line_m",
                "near_line", "nearest_segment_id", "risk_pct_nearest"}
+WUI_PROV = {"file": "buildings.parquet", "source": "overture",
+            "overture_release": "2026-10-21.0",
+            "temporal_status": "static_release_after_backtest_as_of"}
+TIME_VARYING_PROV = {
+    "fire_history": {"max_time_used_utc": "2025-05-28T11:54:00+00:00"},
+    "fuel_dryness": {"max_time_used_utc": "2025-05-31T09:10:06+00:00"},
+    "wind_exposure": {"max_time_used_utc": "2024-09-30T20:00:00+00:00"},
+}
+BASE_LAYERS = [
+    {"layer": "lines", "source": "osm_power_lines", "release": "2026-10-30",
+     "used_by": ["segments", "all_factors", "near_line_events"]},
+    {"layer": "boundary", "source": "osm_boundary", "release": "2026-10-30",
+     "used_by": ["segments", "event_universe"]},
+]
+
+
+def _cfg(**kw) -> bt.BacktestConfig:
+    base = dict(as_of=date(2025, 5, 31), season=(date(2025, 6, 1), date(2025, 9, 30)),
+                metric_crs="EPSG:32635", event_line_distance_m=500, cluster_distance_m=1000,
+                cluster_gap_days=2, top_shares=(0.1, 0.2), bootstrap_n=10, bootstrap_seed=1,
+                sensitivity_distances_m=(1000,))
+    return bt.BacktestConfig(**{**base, **kw})
+
+
+def _limitations(static=(), chm=None, type_filter=None, n=2, total=10):
+    return bt.limitations(
+        n, total, _cfg(), chm_dates=chm or {"acq_min": "2016-07-22", "acq_max": "2020-02-18"},
+        static_layers=list(static),
+        type_filter=type_filter or {"type_column": True, "n_excluded_by_type": {}})
 
 
 # ------------------------------------------------------------------ pure parts
@@ -68,11 +102,7 @@ def test_top_mask_and_null_block():
 
 
 def test_leakage_guard_refuses_later_data():
-    cfg = bt.BacktestConfig(as_of=date(2025, 5, 31), season=(date(2025, 6, 1),
-                            date(2025, 9, 30)), metric_crs="EPSG:32635",
-                            event_line_distance_m=500, cluster_distance_m=1000,
-                            cluster_gap_days=2, top_shares=(0.1, 0.2), bootstrap_n=10,
-                            bootstrap_seed=1, sensitivity_distances_m=(1000,))
+    cfg = _cfg()
     ok = {"as_of": "2025-05-31",
           "provenance": {"fire_history": {"max_time_used_utc": "2025-05-31T20:59:00+00:00"}}}
     bt.check_no_leakage({"as_of": "2025-05-31"}, ok, cfg)
@@ -84,8 +114,159 @@ def test_leakage_guard_refuses_later_data():
         bt.check_no_leakage({"as_of": "2026-10-30"}, ok, cfg)
     with pytest.raises(bt.BacktestLeakageError, match="season"):
         bt.check_no_leakage({"as_of": "2025-05-31"}, ok,
-                            bt.BacktestConfig(**{**cfg.__dict__, "season": (
-                                date(2025, 5, 15), date(2025, 9, 30))}))
+                            _cfg(season=(date(2025, 5, 15), date(2025, 9, 30))))
+
+
+def test_static_layers_after_as_of_are_declared_not_silently_passed():
+    """REV-F3F4 Y1: static layers carry no max_time_used_utc. A layer whose
+    temporal_status says "after_" or whose release/access date is on or after as_of is
+    listed (not raised: there is no as_of snapshot to use instead)."""
+    fmeta = {"as_of": "2025-05-31", "provenance": {
+        **TIME_VARYING_PROV,
+        "wui_exposure": WUI_PROV,
+        "fuel_continuity": {"file": "worldcover.tif", "temporal_status": "static_2021"},
+        "slope": {"file": "dem_slope.tif"},
+        "old_layer": {"file": "old.parquet", "release": "2025-05-30"},
+        "same_day": {"file": "same.parquet", "release": "2025-05-31"},  # >= as_of
+        "asset_condition": {"status": "unavailable"},
+    }}
+    base = [*BASE_LAYERS, {"layer": "older", "source": "x", "release": "2020-01-01",
+                           "used_by": ["segments"]},
+            {"layer": "undated", "source": None, "release": None, "used_by": ["segments"]}]
+    chk = bt.check_no_leakage({"as_of": "2025-05-31"}, fmeta, _cfg(), base)
+    assert chk.as_of == AsOf(date(2025, 5, 31))
+    got = {e["layer"]: e for e in chk.static_after_as_of}
+    assert set(got) == {"buildings", "lines", "boundary", "same", "undated"}
+    b = got["buildings"]
+    assert (b["release"], b["release_date"]) == ("2026-10-21.0", "2026-10-21")
+    assert b["used_by"] == ["wui_exposure", "baselines.buildings"]
+    assert "temporal_status" in b["basis"] and "2026-10-21" in b["basis"]
+    assert got["lines"]["release_date"] == "2026-10-30"
+    assert "near_line_events" in got["lines"]["used_by"]
+    assert got["undated"]["release"] is None and "unknown" in got["undated"]["basis"]
+    for e in chk.static_after_as_of:
+        assert {"layer", "release", "used_by", "label_tr", "label_en", "basis"} <= set(e)
+    # nothing static is flagged when every static input predates as_of
+    clean = {"as_of": "2025-05-31", "provenance": {
+        **TIME_VARYING_PROV, "slope": {"file": "dem_slope.tif"},
+        "fuel_continuity": {"file": "worldcover.tif", "temporal_status": "static_2021"}}}
+    rmeta = {"as_of": "2025-05-31",
+             "chm_dates": {"acq_min": "2016-07-22", "acq_max": "2020-02-18"}}
+    assert bt.check_no_leakage(rmeta, clean, _cfg(), base[2:3]).static_after_as_of == ()
+    # a multi-year backtest with an early as_of must declare later CHM and WorldCover
+    early = _cfg(as_of=date(2019, 5, 31), season=(date(2019, 6, 1), date(2019, 9, 30)))
+    late = bt.check_no_leakage({**rmeta, "as_of": "2019-05-31"},
+                               {**clean, "as_of": "2019-05-31", "provenance": {
+                                   "fuel_continuity": clean["provenance"]["fuel_continuity"]}},
+                               early, base[2:3])
+    got = {e["layer"]: e for e in late.static_after_as_of}
+    assert set(got) == {"chm", "worldcover", "older"}
+    assert got["chm"]["release_date"] == "2020-02-18"
+    assert "baselines.vegetation_chm" in got["chm"]["used_by"]
+    assert got["worldcover"]["used_by"] == ["fuel_continuity", "baselines.tree_shrub_cover"]
+
+
+def test_leakage_block_note_and_buildings_baseline_limitation():
+    fmeta = {"provenance": {**TIME_VARYING_PROV, "wui_exposure": WUI_PROV}}
+    chk = bt.check_no_leakage({"as_of": "2025-05-31"}, {"as_of": "2025-05-31", **fmeta},
+                              _cfg(), BASE_LAYERS)
+    block = bt.leakage_block(chk, fmeta)
+    assert block["static_after_as_of"] == list(chk.static_after_as_of)
+    assert [e["layer"] for e in block["time_varying_before_cutoff"]] == [
+        "fire_history", "fuel_dryness", "wind_exposure"]
+    assert block["cutoff_utc"] == "2025-05-31T21:00:00+00:00"
+    for key, words in (("note_tr", ("FIRMS, Sentinel-2, rüzgâr", "Overture 2026-10-21.0",
+                                    "OSM 2026-10-30", "iyimser")),
+                       ("note_en", ("FIRMS, Sentinel-2, wind", "Overture 2026-10-21.0",
+                                    "OSM 2026-10-30", "optimistic"))):
+        for w in words:
+            assert w in block[key], (key, w)
+    tr, en = _limitations(chk.static_after_as_of)
+    assert len(tr) == len(en)
+    hit_tr = [s for s in tr if "Bina yakınlığı taban çizgisi" in s]
+    hit_en = [s for s in en if "building-proximity baseline" in s]
+    assert len(hit_tr) == len(hit_en) == 1
+    assert "iyimser" in hit_tr[0] and "Overture 2026-10-21.0" in hit_tr[0]
+    assert "optimistic" in hit_en[0] and "OSM 2026-10-30" in hit_en[0]
+    # without a late building layer the baseline sentence is not written
+    tr0, en0 = _limitations([e for e in chk.static_after_as_of if e["layer"] != "buildings"])
+    assert not any("Bina yakınlığı" in s for s in tr0)
+    assert not any("building-proximity" in s for s in en0)
+    empty = bt.leakage_block(bt.LeakageCheck(AsOf(date(2025, 5, 31)), ()), fmeta)
+    assert empty["static_after_as_of"] == [] and "bulunmadı" in empty["note_tr"]
+
+
+def test_degenerate_bootstrap_interval_is_null_with_note():
+    """REV-F3F4 O2: with k in {0, n} every bootstrap resample has the same share, so the
+    percentile interval [x, x] is not a confidence interval."""
+    boot = np.random.default_rng(0).integers(0, 2, size=(500, 2))
+    for in_top in (np.array([False, False]), np.array([True, True])):
+        b = bt.lift_block(in_top, 0.2, boot)
+        assert b["ci95"] is None and b["ci95_note"] == bt.CI_NOTE_DEGENERATE
+        assert b["lift"] == pytest.approx(in_top.mean() / 0.2)
+        assert b["ci95_binomial"] is not None and b["ci95_binomial"][1] > b["ci95_binomial"][0]
+    mixed = bt.lift_block(np.array([True, False]), 0.2, boot)
+    assert mixed["ci95"] is not None and mixed["ci95_note"] is None
+    empty = bt.lift_block(np.zeros(0, dtype=bool), 0.2, np.zeros((0, 0), dtype=int))
+    assert empty["ci95"] is None and empty["ci95_note"] == bt.CI_NOTE_NO_EVENTS
+    no_top = bt.lift_block(np.array([False, False]), 0.0, boot)
+    assert no_top["lift"] is None and no_top["ci95_note"] == bt.CI_NOTE_EMPTY_TOP
+    assert bt.null_block(2, 0.1, 0.1, np.random.default_rng(1), 100)["ci95_note"] is None
+    assert bt.null_block(0, 0.1, 0.1, np.random.default_rng(1), 100)["ci95_note"] == \
+        bt.CI_NOTE_NO_EVENTS
+
+
+def _exact_power(n: int, p0: float, p1: float, alpha: float) -> float:
+    k = next(k for k in range(n + 2) if stats.binom.sf(k - 1, n, p0) <= alpha)
+    return float(stats.binom.sf(k - 1, n, p1))
+
+
+def test_verdict_threshold_matches_its_power_rationale():
+    """MIN_EVENTS_INFORMATIVE is the smallest n from which a one-sided exact binomial
+    test (alpha 0.05) keeps >= 80 % power for lift 2 in the top 20 % (0.40 vs 0.20)."""
+    power = {n: _exact_power(n, 0.20, 0.40, 0.05) for n in range(2, 201)}
+    stable = min(n for n in power if all(power[m] >= 0.80 for m in power if m >= n))
+    assert bt.MIN_EVENTS_INFORMATIVE == stable
+    v = bt.verdict(2)
+    assert v == {**v, "informative": False, "n_events": 2,
+                 "min_events": bt.MIN_EVENTS_INFORMATIVE}
+    assert {"informative", "reason_tr", "reason_en"} <= set(v)
+    assert str(bt.MIN_EVENTS_INFORMATIVE) in v["reason_tr"]
+    assert str(bt.MIN_EVENTS_INFORMATIVE) in v["reason_en"]
+    assert bt.verdict(stable)["informative"] is True
+    assert bt.verdict(stable - 1)["informative"] is False
+
+
+def test_chm_limitation_is_generated_from_the_risk_meta_dates():
+    """REV-F3F4 O1: the CHM range is read from rmeta["chm_dates"], not typed by hand."""
+    tr, en = bt.chm_limitation({"acq_min": "2016-07-22", "acq_max": "2020-02-18"},
+                               date(2025, 5, 31))
+    assert "2016-07-22…2020-02-18" in tr and "5,3–8,9 yıl" in tr
+    assert "2016-07-22…2020-02-18" in en and "5.3–8.9 years" in en
+    tr, en = bt.chm_limitation({"file": None, "note": "missing"}, date(2025, 5, 31))
+    assert "bilinmiyor" in tr and "unknown" in en
+    lim_tr, lim_en = _limitations(chm={"acq_min": "2017-01-01", "acq_max": "2019-12-31"})
+    assert any("2017-01-01…2019-12-31" in s for s in lim_tr)
+    assert any("2017-01-01…2019-12-31" in s for s in lim_en)
+    assert not any("2020-02-19" in s for s in [*lim_tr, *lim_en])
+
+
+def test_limitations_state_selection_bias_and_soft_registration_wording():
+    """REV-F3F4 O4 and D2: the registration claim names what can be verified."""
+    tr, en = _limitations()
+    joined_tr, joined_en = " ".join(tr), " ".join(en)
+    assert "Seçim yanlılığı" in joined_tr and "Selection bias" in joined_en
+    for w in ("c423a81", "aynı commit", "0 tespit"):
+        assert w in joined_tr, w
+    for w in ("c423a81", "same commit", "0 season detections"):
+        assert w in joined_en, w
+    assert not re.search(r"önceden kayıtlı|sonuç görülmeden", joined_tr, re.I)
+    assert not re.search(r"pre-registered", joined_en, re.I)
+    tr2, en2 = _limitations(type_filter={"type_column": True,
+                                         "n_excluded_by_type": {"2": 3, "3": 1}})
+    assert "4 tespit" in " ".join(tr2) and "4 season detections" in " ".join(en2)
+    tr3, _ = _limitations(type_filter={"type_column": False})
+    assert "type sütunu yok" in " ".join(tr3)
 
 
 # ------------------------------------------------------------ synthetic AOI run
@@ -151,27 +332,93 @@ def test_events_selection_and_properties(run):
     assert res.summary["events_summary"]["n_clusters_outside_aoi"] == 1
 
 
+def sens_results(s):
+    return list(s["sensitivity_line_distance"]["results"].values())
+
+
+def _lift_blocks(s):
+    """(block, n events) of every lift_block: model, single-factor baselines and the
+    distance sensitivities (baseline views carry no n_events of their own)."""
+    for res in (s, *sens_results(s)):
+        n = res["n_events"]
+        yield from ((res[k], n) for k in ("top10", "top20"))
+        for key, b in res["baselines"].items():
+            if key not in ("expected", "length"):
+                yield from ((b[k], n) for k in ("top10", "top20"))
+
+
 def test_summary_contract_and_sensitivity_labels(run):
     _, res = run
     s = res.summary
     assert {"as_of", "season", "n_events", "top10", "top20", "baselines", "limitations_tr",
-            "limitations_en", "event_line_distance_m", "n_events_total"} <= set(s)
+            "limitations_en", "event_line_distance_m", "n_events_total", "verdict",
+            "leakage"} <= set(s)
     assert s["as_of"] == "2025-05-31" and s["season"] == "2025-06-01..2025-09-30"
     for k in ("top10", "top20"):
-        assert {"share", "expected", "lift", "ci95"} <= set(s[k])
+        assert {"share", "expected", "lift", "ci95", "ci95_note"} <= set(s[k])
         assert s[k]["lift"] == pytest.approx(s[k]["share"] / s[k]["expected"], abs=1e-3)
     for key in ("expected", "length", "vegetation_chm", "fire_history", "linear",
                 "tree_shrub_cover", "buildings"):
         b = s["baselines"][key]
         assert b["label_tr"] and b["label_en"]
         for k in ("top10", "top20"):
-            assert {"share", "lift", "ci95"} <= set(b[k])
+            assert {"share", "lift", "ci95", "ci95_note"} <= set(b[k])
+    for b, n in _lift_blocks(s):  # O2: no degenerate interval is reported as an interval
+        assert (b["ci95"] is None) == (b["ci95_note"] is not None)  # null iff explained
+        if b["share"] is None:  # the ranking's top set is empty (synthetic ties)
+            assert b["ci95_note"] == bt.CI_NOTE_EMPTY_TOP
+        elif b["n_in_top"] in (0, n):
+            assert b["ci95_note"] == bt.CI_NOTE_DEGENERATE
+    for res in (s, *sens_results(s)):
+        for key in ("expected", "length"):
+            for k in ("top10", "top20"):
+                b = res["baselines"][key][k]
+                assert (b["ci95"] is None) == (b["ci95_note"] is not None)
     sens = s["sensitivity_line_distance"]
     assert "DUYARLILIK" in sens["label_tr"] and "SENSITIVITY" in sens["label_en"]
+    assert "Önceden kayıtlı" not in sens["label_tr"]
+    assert "pre-registered" not in sens["label_en"]
     assert set(sens["results"]) == {"1000", "2000"}
     assert sens["results"]["2000"]["n_events"] == 4  # the 1.4 km event joins
     assert s["limitations_tr"] and len(s["limitations_tr"]) == len(s["limitations_en"])
+    v = s["verdict"]
+    assert v["informative"] is False and v["n_events"] == s["n_events"] == 3
+    assert v["reason_tr"] and v["reason_en"]
+    lk = s["leakage"]
+    assert {"static_after_as_of", "note_tr", "note_en"} <= set(lk)
+    # synthetic AOI: the wui provenance flags the building layer; without a MANIFEST and
+    # without chm_acq_segment.parquet the dates of lines, boundary and CHM are unknown and
+    # therefore declared as well
+    layers = {e["layer"]: e for e in lk["static_after_as_of"]}
+    assert set(layers) == {"buildings", "lines", "boundary", "chm"}
+    assert layers["lines"]["release"] is None and layers["chm"]["release"] is None
+    assert any("Bina yakınlığı taban çizgisi" in t for t in s["limitations_tr"])
     json.dumps(s, allow_nan=False)
+
+
+def test_base_layer_dates_come_from_the_manifest(run):
+    syn, _ = run
+    man = syn.root / "data" / "raw" / "MANIFEST.csv"
+    rows = [
+        {"kaynak": "osm_power_lines", "yerel_yol": f"data/raw/{AOI}/lines_overpass.json",
+         "tarih": "2026-10-30"},
+        {"kaynak": "osm_power_lines", "yerel_yol": "data/raw/other_aoi/lines_overpass.json",
+         "tarih": "2027-01-01"},  # another AOI: ignored
+        {"kaynak": "osm_boundary", "yerel_yol": f"data/raw/{AOI}/boundary_overpass.json",
+         "tarih": "2024-01-01"},  # before as_of: not declared
+    ]
+    with man.open("w", encoding="utf-8", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=MANIFEST_COLUMNS)
+        w.writeheader()
+        w.writerows([{c: r.get(c, "") for c in MANIFEST_COLUMNS} for r in rows])
+    base = {b["layer"]: b for b in bt.base_layer_dates(syn.root, AOI)}
+    assert base["lines"]["release"] == "2026-10-30"
+    assert base["boundary"]["release"] == "2024-01-01"
+    s = bt.run_backtest(AOI, syn.root).summary
+    layers = {e["layer"]: e for e in s["leakage"]["static_after_as_of"]}
+    assert set(layers) == {"buildings", "lines", "chm"}
+    assert layers["lines"]["release"] == "2026-10-30"
+    assert "OSM 2026-10-30" in s["leakage"]["note_tr"]
 
 
 def test_season_detections_never_move_the_as_of_ranking(run):

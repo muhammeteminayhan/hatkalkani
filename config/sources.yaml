@@ -9,16 +9,15 @@ sources:
     license: CC BY 4.0
     attribution: "Meta and World Resources Institute (WRI) - 2024. High Resolution Canopy Height Maps (CHM)."
     url: https://registry.opendata.aws/dataforgood-fb-forests/
-    note: "v2 görüntü tarihi yok (ADR-008); v1 için ek Maxar satırı v2'de doğrulanmadı."
+    note: "CHM v2 görüntü tarihleri metadata'da parça bazında var (2016–2020); v1 için ek Maxar satırı v2'de doğrulanmadı."
   - name: Copernicus Sentinel-2 L2A
     license: Copernicus Sentinel veri şartları (ücretsiz, açık)
     attribution: "Contains modified Copernicus Sentinel data 2025, 2026"
     url: https://earth-search.aws.element84.com/v1
   - name: Copernicus DEM GLO-30
     license: Copernicus DEM lisansı; ücretsiz kullanım, atıfla
-    attribution: "ESA/Copernicus"
+    attribution: "© DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved"
     url: https://earth-search.aws.element84.com/v1/collections/cop-dem-glo-30
-    note: "Resmi atıf metni doğrulanmadı."
   - name: ESA WorldCover 2021 v200
     license: CC BY 4.0
     attribution: "© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium"

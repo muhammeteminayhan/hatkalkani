@@ -32,7 +32,7 @@ Bu depo, Claude Code masaüstünde çok ajanlı çalışmak üzere hazırlanmı�
 |---|---|
 | Python | 3.12 (`pyproject.toml`: `>=3.12,<3.14`). Geliştirme ortamı 3.12.16 (`docs/STATUS.md`, F0-2) |
 | uv | Bağımlılık ve çalıştırma aracı. Kurulum: https://docs.astral.sh/uv/ . Geliştirmede 0.13.6 kullanıldı |
-| Disk alanı | [DOĞRULANACAK] Ham ve ara veri boyutu ölçülmedi |
+| Disk alanı | Yaklaşık 1,05 GB: `data/` 394 MB + `.venv` 653 MB (pilot ilçe; qa-F4 ölçümü, 31 Eki 2026) |
 | İnternet | Yalnızca veri indirme için. Sunucu çalışırken ağ çağrısı yapmaz |
 | FIRMS_MAP_KEY | Ücretsiz NASA FIRMS anahtarı: https://firms.modaps.eosdis.nasa.gov/api/map_key/ . Anahtar `.env` dosyasına yazılır; değeri bu README'ye, koda veya sohbete yazılmaz |
 | İşletim sistemi | Hedef Windows ve macOS. Geliştirme Windows 11'de yapıldı (`docs/STATUS.md`, F0-4) |
@@ -77,7 +77,7 @@ Ağ gerektiren testler varsayılan çalıştırmada atlanır.
 
 ### İlk çalıştırma ve önbellek
 
-- **İlk çalıştırma uzundur**, çünkü veri indirilir. FIRMS'in ilk indirmesi yaklaşık 25 dakika sürdü (`docs/STATUS.md`, F2-5). Toplam süre: [DOĞRULANACAK]
+- **İlk çalıştırma uzundur**, çünkü veri indirilir. FIRMS'in ilk indirmesi yaklaşık 25 dakika sürdü (`docs/STATUS.md`, F2-5). Temiz kurulumda toplam süre henüz ölçülmedi; temiz klon provasında ölçülecek. Önbellekten `--stage all` 140 sn sürdü (qa-F4, 31 Eki 2026).
 - **Sonraki çalıştırmalar önbellekten gelir.** Önbellekten tüm ingest 29,2 sn; features 13,6 sn; score 3,0 sn (`docs/STATUS.md`, F2-6, F3-1, F3-2).
 
 ### Pipeline seçenekleri
@@ -102,16 +102,16 @@ uv run python scripts/serve.py --host 127.0.0.1 --port 8001
 - **Orta:** harita. **Sağ:** detay çekmecesi. **Üst bant:** 3 sayaç. **Alt bilgi:** atıflar.
 - **Dil:** TR/EN düğmesiyle değişir.
 - **Çevrimdışı:** MapLibre dosyaları `web/vendor/` altında yereldir. Çevrimiçi altlık yanıt vermezse (4 sn zaman aşımı) düz arka plan, ilçe sınırı ve hat katmanları gösterilir; alt bilgi bunu belirtir (`docs/ATTRIBUTIONS.md`).
-- Senaryo ve Doğrulama sekmeleri yalnızca mock veriyle denendi; gerçek veriyle denemesi [DOĞRULANACAK].
+- Senaryo ve Doğrulama sekmeleri gerçek API verisiyle denendi (qa-F4, 31 Eki 2026). Mock modu (`?mock=1`) yalnız arayüz geliştirme içindir; değerleri uydurmadır ve sayfada "MOCK" bandı görünür.
 
 ## Dürüstlük notları
 
 - **Kademeler görelidir.** Kritik kademe her zaman yaklaşık %5 çıkar (pilotta 46 / 925 segment; ADR-010, `docs/STATUS.md`, F3-2). Mutlak tehlike düzeyi değildir.
 - **Çıktı bir öncelik sıralamasıdır**, kesin hüküm değildir.
-- **OSM hatlarının çoğu iletim hattıdır.** 92,4 km hattın 61,0 km'si ≥154 kV (ADR-007). Dağıtım şebekesi için sonuç iddia edilmez. EDAŞ dosyası `data/manual/edas/` altındaysa o kullanılır.
+- **OSM hatlarının çoğu iletim hattıdır.** 92,4 km hattın 61,0 km'si ≥154 kV; kalanında OSM'de gerilim etiketi yok (ADR-006; `docs/PITCH_FACTS.md` #27). Dağıtım şebekesi için sonuç iddia edilmez. EDAŞ dosyası `data/manual/edas/` altındaysa o kullanılır.
 - **Yangın kaynağı bildirildi, tespit edilmedi.** 2025 Menderes, Çeşme ve Ödemiş yangınlarının hat kaynaklı olduğu yalnızca medya ve valilik aktarımında geçiyor; resmî tespit yok (ADR-006, `docs/STATUS.md`, F1-3).
 - **Ağaç yüksekliği eski olabilir.** CHM v2 karolarının görüntü tarihleri 2016–2020 arasında karışık; güncel büyüme eksik tahmin edilebilir (ADR-008, `docs/reports/CHM-META.md`).
 
 ## Kaynaklar
 
-Veri, yazılım ve görsel atıfları, lisanslar ve bağlantılar: `docs/ATTRIBUTIONS.md`. Copernicus DEM ve CHM v2 atıf metinleri henüz [DOĞRULANMADI] olarak işaretli.
+Veri, yazılım ve görsel atıfları, lisanslar ve bağlantılar: `docs/ATTRIBUTIONS.md`. Copernicus DEM atıf metni doğrulandı (ATTR-1b, 31 Eki 2026); CHM v2 Maxar satırı hâlâ [DOĞRULANMADI].

@@ -595,7 +595,7 @@ def run(aoi_id: str, root: Path = common.ROOT, log=print) -> dict[str, object]:
         "tile_ids": tiles_ok,
         "tiles_missing": tiles_missing,
         "image_dates": {
-            "v2": "unknown (v2 tiles carry no acquisition date)",
+            "v2": "per segment, see chm_acq_segment.parquet (ingest/chm_dates.py, ADR-008)",
             "v1_reference_range_same_area": reference_dates(root, aoi.ilce),
             "source": F1_CORRIDORS_CSV,
         },

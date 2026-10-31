@@ -8,6 +8,7 @@ check of every number, the API contract shape, error types, timing and the CLI.
 from __future__ import annotations
 
 import json
+import re
 import time
 from datetime import date
 
@@ -227,7 +228,24 @@ def test_contract_shape_wgs84_and_notes(scen):
         assert word in out["note_tr"]
     for word in ("OSM", "feeder", "proxy"):
         assert word in out["note_en"]
+    # REV-F3F4 D6: the suffix of "%66'sı" depends on how the number is read aloud; the
+    # sentence is built so that no percentage takes a suffix
+    assert re.search(r"%\d", out["note_tr"])
+    assert not re.search(r"%\d+(?:,\d+)?'", out["note_tr"])
     json.dumps(out, allow_nan=False)  # strict JSON (no NaN)
+
+
+@pytest.mark.parametrize("line,hv", [(0.995, 0.66), (1.0, 0.6), (0.5, 0.0), (0.123, 0.1)])
+def test_notes_never_attach_a_suffix_to_a_percentage(line, hv):
+    # three segments: tagged >= 154 kV line, other line, minor_line
+    length = np.array([hv, line - hv, 1 - line]) * 1000
+    power = np.array(["line", "line", "minor_line"])
+    vclass = np.array(["ge154kv", "etiketsiz", "etiketsiz"])
+    tr, en = scn._notes(vclass, power, length, 300.0)
+    assert not re.search(r"%\d+(?:,\d+)?'", tr)
+    pct = f"%{100 * line:.1f}".replace(".", ",")
+    assert pct in tr and f"%{100 * hv:.0f}" in tr
+    assert f"{100 * line:.1f}%" in en
 
 
 def test_errors_map_to_api_status_codes(scen, tmp_path):

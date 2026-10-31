@@ -1,1 +1,1 @@
-{"id":"izmir_menderes","name":"İzmir / Menderes","bbox":[26.94379,37.98007,27.3137,38.31909],"stats":{"line_km":92.43574,"segment_count":925,"tier_counts":{"kritik":46,"yuksek":139,"orta":278,"dusuk":462},"workorder_count":76}}
+{"id":"izmir_menderes","name":"İzmir / Menderes","as_of":"2026-10-30","bbox":[26.947458,38.088088,27.305807,38.31714],"stats":{"line_km":92.436,"segment_count":925,"tier_counts":{"kritik":46,"yuksek":139,"orta":278,"dusuk":462},"workorder_count":76,"chm_acq_range":["2016-07-22","2020-02-18"]},"_mock":true}

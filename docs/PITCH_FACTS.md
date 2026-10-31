@@ -55,7 +55,26 @@ Not: Önerilen metin: "20 Haziran 2024'te Diyarbakır ve Mardin'de başlayan yan
 Not: "itfaiye raporlarıyla bildirildi" yerine şu ifade kullanılmalı: "İzmir'de 2025'te Menderes, Çeşme ve Ödemiş yangınları için valilik açıklamaları ve medyada aktarılan itfaiye raporu iddiaları bulunuyor; resmî veya yargısal bir tespit yapılmadı." Çeşme'yi itfaiye raporu ile ilişkilendirme. GDZ Elektrik yangınların elektrik hatlarından çıktığına dair somut bulgu olmadığını açıkladı (diken.com.tr/?p=1600572, erişim 30 Eki 2026). Ödemiş'te ölü sayısı kaynaklarda 2 ve 3 olarak geçiyor.
 
 ## Model sonuçları
-F3'ten sonra eklenir. Kaynak dosya yoluyla birlikte yazılır, örneğin: `backtest.json → top20.lift`.
+Kaynak dosya yoluyla birlikte yazılır, örneğin: `backtest.json → top20.lift`. Kaynak yolları `data/processed/izmir_menderes/` altındadır.
+
+| # | Bilgi | Kaynak (dosya → alan) | Durum |
+|---|---|---|---|
+| 26 | Pilot ilçe Menderes'te havai hat uzunluğu 92,4 km (dosya: 92,436 km); 925 parça. | `scenario_2025-06-29.json → district_wide.line_km` (92,436); `risk_2026-10-30.meta.json → n_segments` (925) | Dosyadan okundu, eşleşiyor. |
+| 27 | ≥154 kV hat uzunluğu 61,0 km; kalan 31,4 km'de OSM'de gerilim etiketi yok. | `data/processed/izmir_menderes/risk_2026-10-30.parquet` → `voltage_class` (ge154kv 60,99 km, etiketsiz 31,45 km; EPSG:32635 uzunluk, orkestratör sayımı 31 Eki 2026). Ayrıca ADR-006 satır 48. | Doğrulandı |
+| 28 | Kademeler (göreli, AOI yüzdeliği; kritik = üst %5): kritik 46, yüksek 139, orta 278, düşük 462. | `risk_2026-10-30.meta.json → tier_counts` (kritik, yuksek, orta, dusuk); eşik `config.tiers.kritik` (0,95) | Dosyadan okundu, eşleşiyor. |
+| 29 | Öncelikli açıklık (iş paketi): 76. | `risk_2026-10-30.meta.json → workorders.n_spans` (76); `workorders_2026-10-30.csv` 76 veri satırı | Dosyadan okundu, eşleşiyor. |
+| 30 | İş paketi 1: 187664557_0001-0017; ge154kv (154 kV); 1.700 m; en yüksek risk 77,64; ana neden: hatta yakın yüksek ağaç. | `workorders_2026-10-30.csv` (priority=1) → span_id, voltage_class, voltage_kv, length_m, risk_max, main_reason_tr | Dosyadan okundu, eşleşiyor. |
+| 31 | İş paketi 2: 1181160379_0028-0031; etiketsiz (kV alanı boş); 400 m; en yüksek risk 73,48; ana neden: kesintisiz orman/maki. | `workorders_2026-10-30.csv` (priority=2) → span_id, voltage_class, length_m, risk_max, main_reason_tr | Dosyadan okundu, eşleşiyor. |
+| 32 | İş paketi 3: 1181160379_0111-0118; etiketsiz (kV alanı boş); 800 m; en yüksek risk 72,04; ana neden: hatta yakın yüksek ağaç. | `workorders_2026-10-30.csv` (priority=3) → span_id, voltage_class, length_m, risk_max, main_reason_tr | Dosyadan okundu, eşleşiyor. |
+| 33 | Senaryo günü 2025-06-29; rüzgâr eşiği 50 km/sa; en düşük kademe: yüksek. | `scenario_2025-06-29.json → date`; `inputs.gust_kmh` (50,0); `min_tier` | Dosyadan okundu, eşleşiyor. |
+| 34 | Senaryo, ilçe geneli: 92,436 km; 3.469 bina. | `scenario_2025-06-29.json → district_wide.line_km`, `district_wide.buildings` | Dosyadan okundu, eşleşiyor. |
+| 35 | Senaryo, hedefli (hat birimi): 83,371 km; 3.032 bina; risk payı %91,7. | `scenario_2025-06-29.json → targeted.line_km`, `targeted.buildings`, `targeted.risk_covered_ratio` (0,917) | Dosyadan okundu, eşleşiyor. |
+| 36 | Senaryo, aday parça birimi (alt sınır): 18,46 km; 993 bina; risk payı %26,0. | `scenario_2025-06-29.json → sensitivity_segment_unit.line_km`, `.buildings`, `.risk_covered_ratio` (0,2604) | Dosya değeri 18,46 (metinde 18,5 yuvarlaması); dosyadaki değer yazıldı. |
+| 37 | Geriye dönük test (2025 sezonu): ilçede 10 küme. | `backtest.json → n_events_total` (10) | Dosyadan okundu, eşleşiyor. |
+| 38 | Geriye dönük test: hat yakınında (500 m) 2 olay. | `backtest.json → n_events` (2); `event_line_distance_m` (500,0) | Dosyadan okundu, eşleşiyor. |
+| 39 | Geriye dönük test: üst %10 ve üst %20 kümesinde isabet 0 ve 0. | `backtest.json → top10.n_in_top` (0); `top20.n_in_top` (0) | Dosyadan okundu, eşleşiyor. |
+| 40 | Geriye dönük test: `verdict.informative` false; `min_events` 38. | `backtest.json → verdict.informative`, `verdict.min_events` | Dosyadan okundu, eşleşiyor. |
+| 41 | 29.06.2025 vakası (AOI dışı): en yakın OSM hattına uzaklık 2.610,9 m. | `backtest.json → case_studies[0].clusters_starting_that_day[0].dist_to_line_m` (2610,9) | Dosya değeri farklı: spec "2.611 m" (birim hatası, 2.611 km olmalı). Dosyadaki 2.610,9 m yazıldı. |
 
 ## Ek maddeler (F1B-1, pitch-writer; mevcut maddeler değiştirilmedi)
 | # | Bilgi | Kaynak | Durum |

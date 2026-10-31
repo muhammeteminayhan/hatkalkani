@@ -18,29 +18,33 @@
   - yangın sorumluluğu belirlemek,
   - kesinti kararını tek başına vermek.
 - **Doğru kullanım:** Saha ekibinin bakacağı yerlerin sırasını belirlemek. Her iş paketi sahada gözle doğrulanır; saha bulgusu modele faktör olarak eklenebilir (bir fonksiyon + bir config satırı).
-- **Kapsam dışı:** Dağıtım (OG/AG) şebekesi. OSM'de bu ilçede orta gerilim hattı yok (ADR-007). EDAŞ hat dosyası gelene kadar dağıtım şebekesi için sonuç iddia edilmez.
+- **Kapsam dışı:** Dağıtım (OG/AG) şebekesi. Etiketli OG hattı yok (0,43 km power=minor_line var; gerilimi varsayımdır) (ADR-007). EDAŞ hat dosyası gelene kadar dağıtım şebekesi için sonuç iddia edilmez.
 
 ## 2. Veri ve tarihler
 | Veri | Sürüm / dönem | Kullanım | Lisans |
 |---|---|---|---|
-| OSM havai hatlar ve ilçe sınırı | Overpass, erişim 2026-10-30. Uzunluğun %99,5'i `power=line`, %66'sı ≥154 kV etiketli | Segmentler | ODbL 1.0 |
-| Meta/WRI CHM v2 (`dinov3_global_chm_v2_ml3`) | Görüntü tarihleri 2016-07-22…2020-02-19, mozaik (bkz. §3) | vegetation_encroachment, strike_trees | CC BY 4.0 |
+| OSM havai hatlar ve ilçe sınırı | Overpass, erişim 2026-10-30 (güncel anlık görüntü; backtest as_of'undan sonra). Uzunluğun %99,5'i `power=line`, %66'sı ≥154 kV etiketli | Segmentler | ODbL 1.0 |
+| Meta/WRI CHM v2 (`dinov3_global_chm_v2_ml3`) | Görüntü tarihleri 2016-07-22…2020-02-18, mozaik (bkz. §3) | vegetation_encroachment, strike_trees | CC BY 4.0 |
 | Sentinel-2 L2A (`sentinel-2-c1-l2a`) | Backtest: 2025-04-15…05-31 (24 sahne). Güncel: 2026-09-15…10-30 (21 sahne, son sahne 10-25) | fuel_dryness (NDMI) | Copernicus açık veri |
 | Copernicus DEM GLO-30 | sürüm doğrulanmadı | slope, TPI (wind_exposure) | Copernicus DEM lisansı |
 | ESA WorldCover | v200, 2021 | fuel_continuity; su maskesi | CC BY 4.0 |
-| Overture binalar | release 2026-10-21.0; ilçe + 500 m tampon | wui_exposure; senaryoda etkilenen bina | ODbL |
+| Overture binalar | release 2026-10-21.0 (güncel anlık görüntü; backtest as_of'undan sonra); ilçe + 500 m tampon | wui_exposure; senaryoda etkilenen bina | ODbL |
 | NASA FIRMS VIIRS (S-NPP, NOAA-20; SP + NRT) | 2015-07-04 → as_of. Güncel haritada son tespit 2026-10-21. MODIS kullanılmaz | fire_history; geriye dönük test olayları | NASA açık veri |
 | Open-Meteo arşivi (`wind_gusts_10m`) | Klimatoloji 2022–2024 yazları (Haz–Eyl). Senaryo günleri 2025-06-27…30 | wind_exposure; senaryo | CC BY 4.0 |
 
-- **Zaman kuralı (ADR-009):** as_of, Europe/Istanbul yerel takvim günüdür (dahil). Her özellik yalnız as_of kesiminden önceki veriyi kullanır. Kesim, ertesi yerel gece yarısıdır (2025-05-31 için 21:00 UTC).
-- **Sızıntı denetimi:** Geriye dönük test, özellik meta verisindeki her `max_time_used_utc` değerini denetler. Backtest haritasında en geç veri şunlardır:
+- **Zaman kuralı (ADR-009):** as_of, Europe/Istanbul yerel takvim günüdür (dahil). Kesim, ertesi yerel gece yarısıdır (2025-05-31 için 21:00 UTC). Zamanla değişen veriler (FIRMS, Sentinel-2, rüzgâr) kesimden öncedir; bina (Overture 2026-10) ve hat (OSM 2026-10) katmanları güncel anlık görüntüdür.
+- **Sızıntı denetimi:** Geriye dönük test, özellik meta verisindeki her `max_time_used_utc` değerini denetler; kesimden sonraki zaman damgalı veri hata verir. Backtest haritasında en geç veri şunlardır:
   - fire_history: 2025-05-28 11:54 UTC,
   - S2: 2025-05-31,
   - rüzgâr: 2024 yazı.
+- **Statik katman beyanı (FIX-F3, REV-F3F4 Y1):** Statik katmanların zaman damgası yoktur. as_of'tan önce olduğu gösterilemeyenler hata vermez; `backtest.json` → `leakage.static_after_as_of` alanında ve sınırlılıklarda beyan edilir.
+  - Ölçüt: `temporal_status` "after_" içerir ya da sürüm, erişim veya görüntü tarihi as_of'a eşit ya da sonradır. Tarihi bilinmeyen hat, sınır ve CHM katmanları da beyan edilir.
+  - 2025-05-31 haritasında beyan edilenler: binalar (Overture 2026-10-21.0; wui_exposure ve bina yakınlığı taban çizgisi), hatlar/segmentler ve ilçe sınırı (OSM, erişim 2026-10-30).
+  - Etkileri ölçülmedi. Bina katmanı as_of'taki değil sonraki durumu gösterdiği için bina yakınlığı taban çizgisinin sonucu iyimser olabilir.
 - **FIRMS `type` filtresi (ADR-013, orkestratör kararı):** Yalnız `type` 0 ve `type`'ı boş (NRT) satırlar kullanılır; 1/2/3 dışlanır. VIIRS'te bu kuralla yalnız 6 deniz tespiti düştü. Güncel haritada 13 NRT satırı `type`'sız tutuldu.
 
 ## 3. Ağaç yüksekliği (CHM) görüntü tarihleri
-- **Görüntü aralığı 2016-07-22…2020-02-19.** Kaynak: Menderes'in 4 CHM v2 karosundaki ayak izi tarihleri (CHM-META, ADR-008 düzeltmesi). CHM bir mozaiktir; tek bir görüntü yılı yoktur.
+- **Görüntü aralığı 2016-07-22…2020-02-18.** Kaynak: Menderes'in 4 CHM v2 karosundaki ayak izi tarihleri (CHM-META, ADR-008 düzeltmesi); aralık, segment koridorlarına düşen ayak izlerinden okunur (`chm_acq_segment.meta.json`, risk meta verisi `chm_dates`). Backtest sınırlılık metni de bu alandan üretilir. CHM bir mozaiktir; tek bir görüntü yılı yoktur. (FIX-F3 düzeltmesi: önceki "2020-02-19" değeri v1 referans aralığından geliyordu.)
 - **Segment düzeyi:**
   - Her segmentin ±30 m koridorunda alanca baskın görüntü tarihi risk parquet'indedir: `chm_year`, `chm_acq_min`, `chm_acq_max`, `chm_acq_dominant` (kaynak `chm_acq_segment.parquet`). Risk GeoJSON şeması değişmedi.
   - Baskın yıl dağılımı (925 segment): 2016: 30, 2017: 23, 2018: 15, 2019: 630, 2020: 227. Segmentlerin %93'ünde baskın yıl 2019 veya 2020.
@@ -98,16 +102,24 @@ Ağırlıklar başlangıç varsayımıdır (config başlığı: "BAŞLANGIÇ VAR
 - **Vekiller:** Gerçek kesinti birimi EDAŞ fideri ve anahtarlanabilir bölümüdür. Bina sayısı, müşteri sayısının vekilidir. Ayrıntı: docs/reports/F3-4-senaryo.md.
 
 ## 7. Geriye dönük test (as_of 2025-05-31 → 2025-06-01…09-30)
-Protokol sonuç görülmeden kaydedildi (ADR-013). Ayrıntı: docs/reports/F3-3-backtest.md.
+Protokol: ADR-013 ve FIX-F3 ek notu. Ayrıntı: docs/reports/F3-3-backtest.md.
 
+- **Kayıt durumu (REV-F3F4 D2):** "Sonuç görülmeden kayıt" depodan doğrulanamaz.
+  - 500 m birincil eşik, ilk iskelet commit'inden (c423a81) beri config'te sabittir.
+  - FIRMS `type` filtresi 2025 sezonunda 0 tespit dışladı; pratik etkisi yok.
+  - ADR-013 protokolü (`backtest` config bloğu, `type` filtresi, kod) sonuçla aynı commit'te (abe3ebb) kaydedildi.
+  - İleride protokol, sonuçtan önce ayrı bir commit veya etiketle kaydedilecek.
 - **Olaylar:** 788 VIIRS tespiti, 36 uzay-zaman kümesi (≤1 km, ≤2 gün). Tutuşma vekili ilçe içinde olan **10** olay var. Bunlardan **2**'si hatta ≤500 m (birincil eşik).
 - **Sonuç:** Hat yakını 2 olayın hiçbiri üst %10 veya üst %20'de değil.
-  - Lift 0, bootstrap %95 [0, 0]. Bu aralık dejeneredir; k = 0 olduğu için belirsizliği göstermez.
+  - Lift 0. k = 0 olduğu için bootstrap aralığı dejeneredir (tüm yeniden örneklemler aynı payı verir). backtest.json'da `ci95: null` ve `ci95_note: "degenerate"` yazılır; belirsizliği kesin binom aralığı gösterir.
   - Kesin binom lift aralığı üst %10 için [0; 8,37], üst %20 için [0; 4,21].
-  - **Test bilgi vermiyor:** Model ne doğrulandı ne çürütüldü.
+  - **Test bilgi vermiyor:** Model ne doğrulandı ne çürütüldü. backtest.json'da `verdict.informative = false`.
+- **Karar eşiği (`MIN_EVENTS_INFORMATIVE` = 38):** Test, ancak en az 38 hat yakını olayla bilgi verir sayılır. Gerekçe: n ≥ 38'den itibaren tek yönlü kesin binom testi (α = 0,05) üst %20 kümesinde lift 2'yi (pay 0,40'a karşı 0,20) en az %80 güçle saptar. Eşik 2025 sonucundan bağımsız bir güç hesabıdır; n = 2 olduğu için makul her eşikte karar aynıdır.
 - **Taban çizgileri:** rastgele, uzunluğa orantılı, yalnız CHM, yalnız ağaç/çalı örtüsü, yalnız bina yakınlığı, yalnız geçmiş yangın, doğrusal birleştirme.
   - Model hiçbirini geçmiyor.
   - Yalnız bina yakınlığı 2 olaydan 1'ini üst %10'a, 2'sini üst %20'ye koyuyor. n = 2 ve 14 karşılaştırma içinde bu fark gürültüden ayrılamaz.
+  - Bu taban çizgisi as_of'tan sonraki bina katmanına (Overture 2026-10-21.0) dayanır; sonucu iyimser olabilir (§2, statik katman beyanı).
+- **Seçim yanlılığı (REV-F3F4 O4):** Pilot ilçe ve senaryo günleri (27–30 Haziran 2025) 29.06.2025 yangını ve 2024–25 yangınları yüzünden seçildi (ADR-006, ADR-012). Backtest de aynı 2025 sezonunu kullanıyor; yani test bölgesi sonuç bilinerek seçildi. Bugünkü sonuç nötr olduğu için sayılar etkilenmiyor, ama olumlu bir sonuç iyimser olurdu. Çok yıllı testte 2025 ayrı raporlanacak.
 - **Duyarlılık (birincil değil):** 1000 m'de n = 2, 2000 m'de n = 5; model yine 0. Yalnız ≥4 m kümelerle yapılan strike_tall varyantı da 0.
 - **Vaka: 29.06.2025 Menderes yangını.** Hat kaynaklı olduğu yalnız basında bildirildi; resmî tespit yok (F1-3 I-1).
   - FIRMS kümesinde 441 tespit var. Tutuşma vekili en yakın OSM hattına 2611 m uzakta ve ilçe sınırının 263 m dışında.
@@ -124,6 +136,8 @@ Protokol sonuç görülmeden kaydedildi (ADR-013). Ayrıntı: docs/reports/F3-3-
 - **FIRMS:** Piksel ~375 m'dir. Tespit tutuşma noktası değildir; ilk uydu geçişi tutuşmadan saatler sonra olabilir.
 - **Olay tanımı:** Nedeni bilinmeyen yangınlar da olaylara dahildir; çoğu hat kaynaklı değildir. Tarım ve anız yakmaları gürültü katar.
 - **Hat verisi:** OSM hatlarının çoğu iletim hattıdır. Hat kaynaklı yangınların çıkabileceği dağıtım hatları haritada yoktur.
+- **Statik katmanlar:** Bina (Overture 2026-10) ve hat/ilçe sınırı (OSM 2026-10) güncel anlık görüntüdür. Backtest haritası (2025-05-31) bunları da kullanır; as_of'taki durumu göstermezler (§2). Bina yakınlığı taban çizgisi iyimser olabilir.
+- **Seçim yanlılığı:** Pilot ilçe ve senaryo günleri 2025 yangını yüzünden seçildi; backtest aynı sezonu kullanıyor (§7). Olumlu bir backtest sonucu bu yüzden iyimser okunmalıdır.
 - **CHM:** Görüntüler as_of'tan 5–10 yıl eskidir (§3). Hata ~2,8 m (v1).
 - **Rüzgâr:** Open-Meteo ızgarası ~10 km'dir; segmentler yalnız 10 hücre kullanır. Vadi ve sırt ölçeğindeki fark, rüzgâr ölçümüyle değil yalnız TPI ile girer.
 - **Kuruluk:** Backtest ve güncel harita farklı mevsim kompozitlerini kullanır. Geriye dönük testte sınanan "kuruluk", güncel haritadakiyle aynı mevsim değildir.

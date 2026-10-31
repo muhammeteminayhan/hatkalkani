@@ -115,7 +115,7 @@ def test_segment_detail(client: TestClient) -> None:
     j = client.get("/api/segments/1_0001").json()
     assert j["raw"] == {"fuel_continuity": 0.91, "slope": 12.5}
     assert j["contrib"]["fuel_continuity"] == 5.0
-    assert j["chm_year"] is None and "ADR-008" in j["chm_year_note_tr"]
+    assert j["chm_year"] is None and "bulunamadı" in j["chm_year_note_tr"]
     assert j["properties"]["tier"] == "kritik" and j["geometry"]["type"] == "LineString"
     assert j["factor_labels"]["slope"]["en"] == "Steep slope"
     r = client.get("/api/segments/nope")
@@ -205,7 +205,7 @@ def test_chm_dates_present(client: TestClient) -> None:
 
 def test_chm_dates_absent(client: TestClient) -> None:
     j = client.get("/api/segments/1_0001").json()
-    assert j["chm_acq_dominant"] is None and "ADR-008" in j["chm_year_note_tr"]
+    assert j["chm_acq_dominant"] is None and "bulunamadı" in j["chm_year_note_tr"]
     assert client.get("/api/aoi").json()["stats"]["chm_acq_range"] is None
 
 
@@ -230,3 +230,47 @@ def test_warmup_failure_does_not_crash(client: TestClient, tmp_path: Path) -> No
     (tmp_path / "processed" / AOI / "scenario_dates.json").write_text("not json")
     c = TestClient(create_app(tmp_path / "processed", config_dir=tmp_path / "config"))
     assert c.get("/api/health").status_code == 200
+
+
+def test_as_of_format_checked_before_membership(client: TestClient) -> None:
+    assert client.get("/api/aoi?as_of=garbage").status_code == 422
+    assert client.get("/api/aoi?as_of=2031-01-01").status_code == 404
+
+
+def test_scenario_data_error_is_503_and_defaults_from_config(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "config" / "risk_weights.yaml").write_text(
+        "scenario:\n  gust_threshold_kmh: 42\n  risk_threshold_tier: orta\n", encoding="utf-8")
+    c = TestClient(create_app(tmp_path / "processed", config_dir=tmp_path / "config"))
+    seen: list[tuple[float, str]] = []
+
+    class ScenarioDataError(RuntimeError):
+        pass
+
+    def compute(aoi: str, date: str, gust: float, tier: str) -> dict:
+        seen.append((gust, tier))
+        if date == "2025-06-30":
+            raise ScenarioDataError("bad wind file")
+        return {"ok": True}
+
+    mod = types.ModuleType("hatkalkani.model.scenario")
+    mod.compute_scenario = compute
+    mod.ScenarioDataError = ScenarioDataError
+    monkeypatch.setitem(sys.modules, "hatkalkani.model.scenario", mod)
+    assert c.get("/api/scenario?date=2025-06-29").json() == {"ok": True}
+    assert seen == [(42.0, "orta")]
+    r = c.get("/api/scenario?date=2025-06-30")
+    assert r.status_code == 503 and set(r.json()) == {"detail_tr", "detail_en"}
+
+
+def test_backtest_passthrough_and_events_name_from_season(
+    client: TestClient, tmp_path: Path
+) -> None:
+    d = tmp_path / "processed" / AOI
+    bt = {"season": "2024-06-01..2024-10-31", "top10": {"lift": 2.0, "ci95": None},
+          "ci95_note": "n", "leakage": {"ok": True}, "verdict": "x"}
+    (d / "backtest.json").write_text(json.dumps(bt), encoding="utf-8")
+    (d / "events_2024.geojson").write_text('{"type":"FeatureCollection","features":[]}')
+    assert client.get("/api/backtest").json() == bt
+    assert client.get("/api/backtest/events").json()["type"] == "FeatureCollection"

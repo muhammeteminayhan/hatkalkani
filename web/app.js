@@ -52,7 +52,7 @@
     const d = digits === undefined ? 1 : digits;
     return new Intl.NumberFormat(locale(), Object.assign({ minimumFractionDigits: d, maximumFractionDigits: d }, opts || {})).format(Number(n));
   }
-  const pct = (r, d) => (r === null || r === undefined ? t("no_data") : fmt(Number(r) * 100, d === undefined ? 0 : d) + "%");
+  const pct = (r, d) => (r === null || r === undefined || Number.isNaN(Number(r)) ? t("no_data") : new Intl.NumberFormat(locale(), { style: "percent", minimumFractionDigits: d === undefined ? 0 : d, maximumFractionDigits: d === undefined ? 0 : d }).format(Number(r)));
   const pick = (o, base) => (o ? (o[base + "_" + state.lang] !== undefined ? o[base + "_" + state.lang] : o[base + "_tr"]) : undefined);
   function esc(s) { return String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
@@ -130,7 +130,7 @@
   const EMPTY = { type: "FeatureCollection", features: [] };
 
   function tierExpr(byTier, fallback) {
-    return ["match", ["get", "tier"], "kritik", byTier.kritik, "yuksek", byTier.yuksek, "orta", byTier.orta, fallback];
+    return ["match", ["coalesce", ["get", "tier"], "dusuk"], "kritik", byTier.kritik, "yuksek", byTier.yuksek, "orta", byTier.orta, fallback];
   }
   function initMap() {
     map = new maplibregl.Map({
@@ -180,7 +180,7 @@
       for (const id in st.sources) if (!map.getSource(id)) map.addSource(id, st.sources[id]);
       for (const l of st.layers) {
         if (l.type === "background") continue;
-        if (l.type === "symbol" && l.layout) delete l.layout["icon-image"]; // no sprite in this setup
+        if (l.type === "symbol" && l.layout && l.layout["icon-image"]) continue; // icon layers (road shields, POIs) need the sprite; skipped
         map.addLayer(l, "boundary-fill");
       }
       state.basemap = "online";
@@ -192,7 +192,7 @@
   function setSource(id, data) { if (state.mapReady) map.getSource(id).setData(data || EMPTY); }
   function applyTierFilter() {
     if (!state.mapReady) return;
-    const f = ["in", ["get", "tier"], ["literal", Array.from(state.visibleTiers)]];
+    const f = ["in", ["coalesce", ["get", "tier"], "dusuk"], ["literal", Array.from(state.visibleTiers)]];
     map.setFilter("seg-line", f);
     map.setFilter("seg-casing", f);
   }
@@ -221,6 +221,7 @@
   async function boot() {
     applyStaticI18n();
     $("mockbar").hidden = !MOCK;
+    $("mock-mark").hidden = !MOCK;
     initMap();
     renderTierLegend();
     const results = await Promise.allSettled([
@@ -246,7 +247,7 @@
     else renderWorkError(wo.reason);
     renderExports();
     loadSegments(state.currentAsOf).catch(() => { /* map stays empty; KPIs still show */ });
-    window.__hk = { ready: true };
+    window.__hk = { ready: true, map: map };
   }
 
   /* ---------- Top band, legend, footer ---------- */
@@ -295,6 +296,7 @@
       if (on && focus) tb.focus();
     });
     if (prev === "validation" && name !== "validation") leaveValidation();
+    if (name !== "scenario" && name !== "validation") restoreAsOf();
     if (name === "scenario") enterScenario();
     else setLayerVis("scenario-halo", false);
     if (name === "validation") enterValidation();
@@ -455,6 +457,7 @@
   }
   async function enterScenario() {
     setLayerVis("scenario-halo", true);
+    fittedScenario = false;
     if (state.dates) { if (!state.scenario && !state.scenarioErr) runScenario(); return; }
     setStatus($("sc-status"), t("loading"));
     try {
@@ -480,7 +483,7 @@
   }
   function selectedDate() { return (state.dates || []).find((d) => d.date === $("sc-date").value); }
   function updateGustLabels() { $("sc-gust-out").textContent = fmt($("sc-gust").value, 0); }
-  let scTimer = null, scTok = 0, scTouched = false;
+  let scTimer = null, scTok = 0, scTouched = false, fittedScenario = false;
   function scheduleScenario() { clearTimeout(scTimer); scTimer = setTimeout(runScenario, 250); }
   $("sc-date").addEventListener("change", runScenario);
   $("sc-gust").addEventListener("input", () => { scTouched = true; updateGustLabels(); scheduleScenario(); });
@@ -499,6 +502,11 @@
       await mapReady;
       setSource("scenario", r.segments);
       renderScenario();
+      if (state.tab === "scenario") await showAsOf(r.inputs && r.inputs.as_of_used);
+      if (state.tab === "scenario" && !fittedScenario && state.aoi && state.aoi.bbox) {
+        fittedScenario = true;
+        map.fitBounds([[state.aoi.bbox[0], state.aoi.bbox[1]], [state.aoi.bbox[2], state.aoi.bbox[3]]], { padding: 40, duration: 600 });
+      }
     } catch (err) {
       if (tok !== scTok) return;
       state.scenario = null; state.scenarioErr = err;
@@ -511,19 +519,18 @@
     const r = state.scenario;
     if (!r) return;
     const dw = r.district_wide, tg = r.targeted, sn = r.sensitivity_segment_unit;
-    const row = (label, val) => '<div class="row"><span>' + esc(label) + "</span><b>" + val + "</b></div>";
-    const card = (cls, title, o, share, covered) => '<div class="card ' + cls + '"><h3>' + esc(title) + "</h3>" +
-      row(t("sc_line_km"), fmt(o.line_km, 1) + " " + t("unit_km")) + row(t("sc_buildings"), fmt(o.buildings, 0)) +
-      (covered !== undefined ? row(t("sc_covered"), pct(covered, 0)) : "") + "</div>";
+    const dash = "—";
+    const tr = (label, a, b, c, tip) => "<tr><th scope='row'" + (tip ? ' title="' + esc(tip) + '"' : "") + ">" + esc(label) + (tip ? " ⓘ" : "") + '</th><td class="n">' + a + '</td><td class="n tg">' + b + '</td><td class="n sn">' + c + "</td></tr>";
     let html = '<p class="small">' + esc(t("sc_asof_used", { d: asOfMonth(r.inputs && r.inputs.as_of_used) })) + "</p>";
-    html += '<div class="cmp">' + card("", t("sc_district"), dw) + card("targeted", t("sc_targeted"), tg, null, tg.risk_covered_ratio) + "</div>";
+    html += '<table class="cmp-table"><thead><tr><th></th><th>' + esc(t("sc_district")) + '</th><th class="tg">' + esc(t("sc_targeted")) + '</th>' + (sn ? '<th class="sn">' + esc(t("sc_sens_title")) + "</th>" : "") + "</tr></thead><tbody>" +
+      tr(t("sc_line_km"), fmt(dw.line_km, 1) + " " + t("unit_km"), fmt(tg.line_km, 1) + " " + t("unit_km"), sn ? fmt(sn.line_km, 1) + " " + t("unit_km") : dash) +
+      tr(t("sc_buildings"), fmt(dw.buildings, 0), fmt(tg.buildings, 0), sn ? fmt(sn.buildings, 0) : dash) +
+      tr(t("sc_covered"), dash, pct(tg.risk_covered_ratio, 0), sn ? pct(sn.risk_covered_ratio, 0) : dash, t("sc_covered_tip")) +
+      "</tbody></table>";
+    if (sn) html += '<p class="small sens-note"><strong>' + esc(t("sc_sens_title")) + ":</strong> " + esc(pick(sn, "label")) + " " + esc(t("sc_sens_note")) + "</p>";
+    html += '<p class="small">' + esc(t("sc_covered_tip_full")) + "</p>";
     html += '<table class="result-table"><tbody><tr><th>' + esc(t("sc_saved_km")) + '</th><td class="n">' + fmt(dw.line_km - tg.line_km, 1) + " " + t("unit_km") + "</td></tr>" +
       "<tr><th>" + esc(t("sc_saved_b")) + '</th><td class="n">' + fmt(dw.buildings - tg.buildings, 0) + "</td></tr></tbody></table>";
-    if (sn) {
-      html += '<h3>' + esc(t("sc_sens_title")) + '</h3><div class="card sens"><p class="small"><strong>' + esc(pick(sn, "label")) + "</strong></p>" +
-        row(t("sc_line_km"), fmt(sn.line_km, 1) + " " + t("unit_km")) + row(t("sc_buildings"), fmt(sn.buildings, 0)) + row(t("sc_covered"), pct(sn.risk_covered_ratio, 0)) +
-        '<p class="small">' + esc(t("sc_sens_note")) + "</p></div>";
-    }
     html += '<div class="callout">' + esc(t("sc_proxy")) + "</div>";
     html += '<p class="small">' + esc(t("sc_on_map")) + "</p>";
     const note = pick(r, "note");
@@ -550,50 +557,98 @@
     renderValidation();
     await mapReady;
     if (state.events) { setSource("events", state.events); setLayerVis("events-ring", true); $("legend-events").hidden = false; }
-    const asOf = state.backtest.as_of;
+    await showAsOf(state.backtest.as_of);
+    if (state.events && state.events.features && state.events.features.length) {
+      const bb = new maplibregl.LngLatBounds();
+      state.events.features.forEach((f) => bb.extend(f.geometry.coordinates));
+      if (state.aoi && state.aoi.bbox) { bb.extend([state.aoi.bbox[0], state.aoi.bbox[1]]); bb.extend([state.aoi.bbox[2], state.aoi.bbox[3]]); }
+      map.fitBounds(bb, { padding: { top: 90, bottom: 90, left: 60, right: 60 }, duration: 600 });
+    }
+  }
+  function leaveValidation() {
+    setLayerVis("events-ring", false);
+    $("legend-events").hidden = true;
+  }
+  function updateAsofBadge() {
+    const on = state.segAsOf && state.currentAsOf && state.segAsOf !== state.currentAsOf;
+    $("map-asof").hidden = !on;
+    if (on) $("map-asof").textContent = t("val_map_asof") + ": " + state.segAsOf;
+  }
+  async function showAsOf(asOf) {
     if (asOf && asOf !== state.segAsOf) {
       closeDrawer();
       try { await loadSegments(asOf); } catch (e) { /* keep current map when the date is unavailable */ }
     }
-    if (state.segAsOf !== state.currentAsOf) { $("map-asof").hidden = false; $("map-asof").textContent = t("val_map_asof") + ": " + state.segAsOf; }
+    updateAsofBadge();
   }
-  async function leaveValidation() {
-    setLayerVis("events-ring", false);
-    $("legend-events").hidden = true;
-    $("map-asof").hidden = true;
-    if (state.segAsOf !== state.currentAsOf) { closeDrawer(); try { await loadSegments(state.currentAsOf); } catch (e) { /* ignore */ } }
+  async function restoreAsOf() {
+    if (state.segAsOf && state.segAsOf !== state.currentAsOf) {
+      closeDrawer();
+      try { await loadSegments(state.currentAsOf); } catch (e) { /* ignore */ }
+    }
+    updateAsofBadge();
   }
-  function ciBlock(o) {
-    const lo = o.ci95 && o.ci95[0], hi = o.ci95 && o.ci95[1];
-    return '<tr><th>' + esc(t("val_ci")) + '</th><td class="n">' + (lo === undefined ? esc(t("no_data")) : fmt(lo, 1) + " – " + fmt(hi, 1)) + "</td></tr>";
-  }
-  function liftBar(o) {
-    if (!o.ci95) return "";
-    const top = Math.max(o.ci95[1], o.lift, 1) * 1.1;
+  function liftBar(lift, ci) {
+    if (!ci) return "";
+    const top = Math.max(ci[1], lift, 1) * 1.1;
     const x = (v) => (Math.min(v, top) / top * 100).toFixed(1) + "%";
-    return '<div class="ci" role="img" aria-label="' + esc(t("val_lift") + " " + fmt(o.lift, 1) + ", " + t("val_ci") + " " + fmt(o.ci95[0], 1) + " – " + fmt(o.ci95[1], 1)) + '">' +
-      '<div class="ref" style="left:' + x(1) + '"></div><div class="bar" style="left:' + x(o.ci95[0]) + ";width:" + (((Math.min(o.ci95[1], top) - o.ci95[0]) / top) * 100).toFixed(1) + '%"></div><div class="pt" style="left:' + x(o.lift) + '"></div></div>';
+    return '<div class="ci" role="img" aria-label="' + esc(t("val_lift") + " " + fmt(lift, 1) + ", " + t("val_ci_binom") + " " + fmt(ci[0], 1) + " – " + fmt(ci[1], 1)) + '">' +
+      '<div class="ref" style="left:' + x(1) + '"></div><div class="bar" style="left:' + x(ci[0]) + ";width:" + (((Math.min(ci[1], top) - ci[0]) / top) * 100).toFixed(1) + '%"></div><div class="pt" style="left:' + x(lift) + '"></div></div>';
   }
+  const range = (ci) => (ci ? fmt(ci[0], 1) + " – " + fmt(ci[1], 1) : t("no_data"));
   function renderValidation() {
     const b = state.backtest;
     if (!b) return;
-    const block = (title, o) => !o ? "" : "<h3>" + esc(title) + "</h3><table class='result-table'><tbody>" +
-      "<tr><th>" + esc(t("val_share")) + '</th><td class="n">' + pct(o.share, 0) + "</td></tr>" +
-      "<tr><th>" + esc(t("val_expected")) + '</th><td class="n">' + pct(o.expected, 0) + "</td></tr>" +
-      "<tr><th>" + esc(t("val_lift")) + '</th><td class="n">' + fmt(o.lift, 1) + "×</td></tr>" + ciBlock(o) + "</tbody></table>" + liftBar(o);
-    let html = "<table class='result-table'><tbody>" +
+    const lim = pick(b, "limitations") || [];
+    let html = lim.length ? '<div class="warn strong" role="alert">' + esc(lim[0]) + "</div>" : "";
+    html += "<table class='result-table'><tbody>" +
       "<tr><th>" + esc(t("val_asof")) + '</th><td class="n">' + esc(b.as_of) + "</td></tr>" +
       "<tr><th>" + esc(t("val_season")) + '</th><td class="n">' + esc(b.season) + "</td></tr>" +
-      "<tr><th>" + esc(t("val_events")) + '</th><td class="n">' + fmt(b.n_events, 0) + "</td></tr></tbody></table>";
+      "<tr><th>" + esc(t("val_events_near")) + '</th><td class="n">' + fmt(b.n_events, 0) + " / " + fmt(b.n_events_total, 0) + "</td></tr>" +
+      (b.event_line_distance_m !== undefined ? "<tr><th>" + esc(t("val_dist")) + '</th><td class="n">' + fmt(b.event_line_distance_m, 0) + " " + t("unit_m") + "</td></tr>" : "") + "</tbody></table>";
+    const block = (title, o) => {
+      if (!o) return "";
+      const degenerate = !o.ci95 || o.ci95_note === "degenerate" || o.ci95[0] === o.ci95[1];
+      const verdict = o.verdict || b.verdict;
+      const small = verdict && verdict.informative !== undefined ? !verdict.informative : o.n_events !== undefined && o.n_events < 5;
+      const tagText = (verdict && pick(verdict, "reason")) || t("val_small_n", { n: fmt(o.n_events, 0) });
+      return "<h3>" + esc(title) + '</h3><div class="card' + (small ? " weak" : "") + '">' +
+        '<div class="liftline"><span class="liftval">' + t("val_lift") + " " + fmt(o.lift, 1) + "×</span>" + (small ? '<span class="tag">' + esc(tagText) + "</span>" : "") + "</div>" +
+        "<table class='result-table'><tbody>" +
+        "<tr><th>" + esc(t("val_share")) + '</th><td class="n">' + pct(o.share, 0) + (o.n_in_top !== undefined ? " (" + fmt(o.n_in_top, 0) + "/" + fmt(o.n_events, 0) + ")" : "") + "</td></tr>" +
+        "<tr><th>" + esc(t("val_expected")) + '</th><td class="n">' + pct(o.expected, 0) + "</td></tr>" +
+        (o.ci95_binomial ? "<tr><th>" + esc(t("val_ci_binom")) + '</th><td class="n strongnum">' + range(o.ci95_binomial) + "</td></tr>" : "") +
+        "<tr><th>" + esc(t("val_ci_boot")) + '</th><td class="n">' + (degenerate ? esc(t("val_degenerate")) : range(o.ci95)) + "</td></tr>" +
+        (o.p_value_binomial !== undefined ? "<tr><th>" + esc(t("val_p")) + '</th><td class="n">' + fmt(o.p_value_binomial, 2) + "</td></tr>" : "") +
+        "</tbody></table>" + liftBar(o.lift, o.ci95_binomial || (degenerate ? null : o.ci95)) + "</div>";
+    };
     html += block(t("val_top10"), b.top10) + block(t("val_top20"), b.top20);
+    const cell = (o) => (o ? fmt(o.lift, 1) + "×" : t("no_data"));
     const bl = b.baselines || {};
     const keys = Object.keys(bl);
     if (keys.length) {
-      const cell = (o) => (o ? pct(o.share, 0) + " · " + fmt(o.lift, 1) + "× (" + (o.ci95 ? fmt(o.ci95[0], 1) + "–" + fmt(o.ci95[1], 1) : t("no_data")) + ")" : t("no_data"));
-      html += "<h3>" + esc(t("val_baselines")) + "</h3><table class='result-table'><thead><tr><th></th><th>" + esc(t("val_top10")) + "</th><th>" + esc(t("val_top20")) + "</th></tr></thead><tbody>" +
-        keys.map((k) => { const v = bl[k] || {}; return "<tr><td>" + esc(pick(v, "label") || k.replace(/_/g, " ")) + "</td><td>" + cell(v.top10) + "</td><td>" + cell(v.top20) + "</td></tr>"; }).join("") + "</tbody></table>";
+      html += "<h3>" + esc(t("val_baselines")) + "</h3><table class='result-table'><thead><tr><th></th><th class='n'>" + esc(t("val_top10")) + "</th><th class='n'>" + esc(t("val_top20")) + "</th></tr></thead><tbody>" +
+        keys.map((k) => { const v = bl[k] || {}; return "<tr><td>" + esc(pick(v, "label") || k.replace(/_/g, " ")) + '</td><td class="n">' + cell(v.top10) + '</td><td class="n">' + cell(v.top20) + "</td></tr>"; }).join("") + "</tbody></table>";
     }
-    const lim = pick(b, "limitations") || [];
+    const sens = b.sensitivity_line_distance;
+    if (sens && sens.results) {
+      html += '<h3 class="sens-h">' + esc(pick(sens, "label")) + "</h3><table class='result-table'><thead><tr><th>" + esc(t("val_dist")) + "</th><th class='n'>" + esc(t("val_events_short")) + "</th><th class='n'>" + esc(t("val_top10")) + "</th><th class='n'>" + esc(t("val_top20")) + "</th></tr></thead><tbody>" +
+        Object.keys(sens.results).sort((x, y) => Number(x) - Number(y)).map((k) => { const r = sens.results[k]; return "<tr><td>" + fmt(k, 0) + " " + t("unit_m") + '</td><td class="n">' + fmt(r.n_events, 0) + '</td><td class="n">' + cell(r.top10) + '</td><td class="n">' + cell(r.top20) + "</td></tr>"; }).join("") + "</tbody></table>";
+    }
+    if (b.case_studies && b.case_studies.length) {
+      html += "<h3>" + esc(t("val_cases")) + "</h3>" + b.case_studies.map((c) => {
+        const cl = (c.clusters_starting_that_day || []).slice().sort((x, y) => (y.n_detections || 0) - (x.n_detections || 0));
+        return '<div class="card case"><strong>' + esc(c.name) + '</strong><p class="small">' + esc(t("val_source")) + ": " + esc(pick(c, "source")) + "</p>" +
+          (cl.length ? "<table class='result-table'><thead><tr><th>" + esc(t("val_cluster")) + "</th><th class='n'>" + esc(t("val_dist_line")) + "</th><th>" + esc(t("val_tier_near")) + "</th></tr></thead><tbody>" +
+            cl.map((e) => "<tr><td>" + esc(e.event_id) + " (" + fmt(e.n_detections, 0) + ")" + (e.inside_aoi === false ? '<br><span class="small">' + esc(t("val_outside")) + "</span>" : "") + "</td><td class='n'>" + fmt(e.dist_to_line_m, 0) + " " + t("unit_m") + "</td><td>" + (TIERS.includes(e.tier_nearest) ? tierChip(e.tier_nearest) : esc(t("no_data"))) + "</td></tr>").join("") + "</tbody></table>" : "") + "</div>";
+      }).join("");
+    }
+    const lk = b.leakage && b.leakage.static_after_as_of;
+    if (lk && lk.length) {
+      html += "<h3>" + esc(t("val_leak")) + '</h3><ul class="plain">' + lk.map((x) => "<li>" + esc(typeof x === "string" ? x : pick(x, "label") || x.name || x.layer || JSON.stringify(x)) + "</li>").join("") + "</ul>";
+      const ln = pick(b.leakage, "note");
+      if (ln) html += '<p class="small">' + esc(ln) + "</p>";
+    }
     if (lim.length) html += "<h3>" + esc(t("val_limits")) + '</h3><ul class="plain">' + lim.map((x) => "<li>" + esc(x) + "</li>").join("") + "</ul>";
     $("val-result").innerHTML = html;
   }
@@ -622,7 +677,7 @@
     }
     renderScenario();
     renderValidation();
-    if (!$("map-asof").hidden) $("map-asof").textContent = t("val_map_asof") + ": " + state.segAsOf;
+    updateAsofBadge();
     if (state.scenarioErr && state.tab === "scenario") notReady($("sc-status"), state.scenarioErr);
     if (state.backtestErr && !state.backtest && state.tab === "validation") notReady($("val-status"), state.backtestErr);
   }

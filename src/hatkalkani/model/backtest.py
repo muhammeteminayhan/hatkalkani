@@ -1,12 +1,16 @@
 """Retrospective test of the as_of risk map against the next fire season (spec section 5).
 
-Protocol: ADR-013 (registered before the real-data run). The risk map of
-``periods.backtest_asof`` is compared with NASA FIRMS VIIRS detections of
+Protocol: ADR-013 and its FIX-F3 note. The 500 m primary threshold dates from the project
+skeleton; the rest of the protocol was committed together with the first result. The risk
+map of ``periods.backtest_asof`` is compared with NASA FIRMS VIIRS detections of
 ``periods.backtest_season``: detections are clustered in space-time, each cluster's first
 overpass is the ignition proxy, and for clusters within ``buffers_m.event_line_distance``
 of a segment the nearest segment's risk percentile is read. Shares of events in the top
 10 % / 20 % of segments are compared with the share expected by chance (lift), with
 bootstrap and exact binomial intervals and the same numbers for simple baselines.
+Time-stamped inputs after the as_of cutoff are refused; static layers that do not predate
+as_of (current building and line snapshots) are declared in ``leakage``, and ``verdict``
+says whether the season had enough near-line events to inform at all.
 
 CLI (pipeline stage ``backtest``)::
 
@@ -22,6 +26,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -55,14 +60,66 @@ from hatkalkani.model.score import (
 
 log = logging.getLogger("hatkalkani.model.backtest")
 
-SCHEMA_VERSION = "backtest-0.1"
+SCHEMA_VERSION = "backtest-0.2"  # 0.2 (FIX-F3): verdict, leakage, ci95 null if degenerate
 SHARE_TOL = 1e-9  # top set = percentile >= 1 - share (minus float tolerance)
 DEC = 4  # rounding of shares, lifts and intervals in backtest.json
 CASE_DAY = date(2025, 6, 29)  # F1-3 I-1: Menderes fire reported (media) as line-caused
 
+# REV-F3F4 O2: with k in {0, n} every bootstrap resample has the same share, so the
+# percentile interval collapses to one point; it is written as null with this note.
+# Invariant of backtest.json: ci95 is null exactly when ci95_note is set.
+CI_NOTE_DEGENERATE = "degenerate"
+CI_NOTE_NO_EVENTS = "no_events"
+CI_NOTE_EMPTY_TOP = "empty_top_set"  # the ranking has no segment in the top set (ties)
+
+# Verdict (FIX-F3): a backtest informs only with at least this many near-line events.
+# From n = 38 on, a one-sided exact binomial test (alpha 0.05) keeps >= 80 % power to
+# detect lift 2 in the top 20 % (share 0.40 vs 0.20); test_backtest recomputes it.
+MIN_EVENTS_INFORMATIVE = 38
+VERDICT_RULE = ("informative iff n_events >= {n}: from n = {n} on, a one-sided exact "
+                "binomial test (alpha 0.05) keeps >= 80 % power to detect lift 2 in the top "
+                "20 % (share 0.40 vs 0.20)")
+
+# REV-F3F4 D2: what the repository can show about the registration of the protocol.
+PRIMARY_DISTANCE_SINCE = (500.0, "c423a81")  # event_line_distance fixed since the skeleton
+
+# REV-F3F4 Y1: a static layer has no observation time. It is declared (not refused: there
+# is no as_of snapshot to use instead) when its temporal_status says "after_", when its
+# release, snapshot or imagery date is on or after as_of, or when that date is unknown for
+# a layer that changes over time (lines, boundary, CHM).
+AFTER_STATUS_TOKEN = "after_"
+RELEASE_KEYS = ("overture_release", "release", "snapshot_date", "access_date")
+# static inputs outside the feature registry: layer -> (MANIFEST `kaynak` values, users)
+BASE_LAYERS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "lines": (("osm_power_lines", "edas"), ("segments", "all_factors", "near_line_events")),
+    "boundary": (("osm_boundary",), ("segments", "event_universe")),
+}
+LAYER_LABELS = {"buildings": ("bina", "building"), "lines": ("hat/segment", "line/segment"),
+                "boundary": ("ilçe sınırı", "district boundary"),
+                "chm": ("ağaç yüksekliği (CHM)", "canopy height (CHM)")}
+SOURCE_LABELS = {"overture": "Overture", "osm": "OSM", "osm_power_lines": "OSM",
+                 "osm_boundary": "OSM", "edas": "EDAŞ", "meta_wri_chm": "Meta/WRI"}
+TIME_VARYING_LABELS = {"fire_history": ("FIRMS", "FIRMS"),
+                       "fuel_dryness": ("Sentinel-2", "Sentinel-2"),
+                       "wind_exposure": ("rüzgâr", "wind")}
+# single-factor baselines: ranking key -> factor (spec section 5 b, c and extras)
+BASELINE_FACTORS = {"vegetation_chm": "vegetation_encroachment",
+                    "tree_shrub_cover": "fuel_continuity",
+                    "buildings": "wui_exposure",
+                    "fire_history": "fire_history"}
+CHM_FACTORS = ("vegetation_encroachment", "strike_trees")
+
 
 class BacktestLeakageError(RuntimeError):
     """The risk map used data stamped at/after the as_of cutoff or after the season start."""
+
+
+@dataclass(frozen=True)
+class LeakageCheck:
+    """Result of :func:`check_no_leakage`: the as_of and the declared static layers."""
+
+    as_of: AsOf
+    static_after_as_of: tuple[dict[str, Any], ...]
 
 
 @dataclass(frozen=True)
@@ -143,22 +200,30 @@ def top_mask(pct: np.ndarray, share: float) -> np.ndarray:
 
 
 def lift_block(in_top: np.ndarray, expected: float, boot: np.ndarray) -> dict[str, Any]:
-    """Share of events in a top set, lift, bootstrap and exact binomial intervals."""
+    """Share of events in a top set, lift, bootstrap and exact binomial intervals.
+
+    With k in {0, n} the bootstrap interval is degenerate (every resample has the same
+    share): ``ci95`` is None and ``ci95_note`` says why; ``ci95_binomial`` still holds."""
     n = int(len(in_top))
     if n == 0 or expected <= 0:
         return {"share": None, "expected": _r(expected), "lift": None, "ci95": None,
+                "ci95_note": CI_NOTE_NO_EVENTS if n == 0 else CI_NOTE_EMPTY_TOP,
                 "n_events": n, "n_in_top": 0, "ci95_binomial": None,
                 "p_value_binomial": None}
     k = int(in_top.sum())
     share = k / n
-    shares = in_top[boot].mean(axis=1)
-    lo, hi = np.percentile(shares / expected, [2.5, 97.5])
+    ci: list[float | None] | None = None
+    note = CI_NOTE_DEGENERATE
+    if 0 < k < n:
+        shares = in_top[boot].mean(axis=1)
+        lo, hi = np.percentile(shares / expected, [2.5, 97.5])
+        ci, note = [_r(lo), _r(hi)], None
     ci_share = stats.binomtest(k, n, p=expected).proportion_ci(confidence_level=0.95,
                                                                 method="exact")
     p = stats.binomtest(k, n, p=expected, alternative="greater").pvalue
     return {
         "share": _r(share), "expected": _r(expected), "lift": _r(share / expected),
-        "ci95": [_r(lo), _r(hi)], "n_events": n, "n_in_top": k,
+        "ci95": ci, "ci95_note": note, "n_events": n, "n_in_top": k,
         "ci95_binomial": [_r(ci_share.low / expected), _r(ci_share.high / expected)],
         "p_value_binomial": _r(p),
     }
@@ -170,11 +235,38 @@ def null_block(n: int, p_top: float, expected: float, rng: np.random.Generator,
     probability p_top; ci95 is the 95 % range of the null lift for this many events."""
     if n == 0 or expected <= 0:
         return {"share": _r(p_top), "lift": _r(p_top / expected) if expected else None,
-                "ci95": None, "n_events": n}
+                "ci95": None,
+                "ci95_note": CI_NOTE_NO_EVENTS if n == 0 else CI_NOTE_EMPTY_TOP,
+                "n_events": n}
     lifts = rng.binomial(n, p_top, size=draws) / n / expected
     lo, hi = np.percentile(lifts, [2.5, 97.5])
     return {"share": _r(p_top), "lift": _r(p_top / expected), "ci95": [_r(lo), _r(hi)],
-            "n_events": n}
+            "ci95_note": None, "n_events": n}
+
+
+def verdict(n_events: int, min_events: int = MIN_EVENTS_INFORMATIVE) -> dict[str, Any]:
+    """Whether the season had enough near-line events to inform (MIN_EVENTS_INFORMATIVE)."""
+    if n_events >= min_events:
+        return {
+            "informative": True, "n_events": n_events, "min_events": min_events,
+            "reason_tr": f"Bilgi verir: hat yakınında {n_events} olay var (eşik "
+                         f"{min_events}). Sonucu lift ve güven aralıklarıyla birlikte okuyun.",
+            "reason_en": f"Informative: {n_events} near-line events (threshold "
+                         f"{min_events}). Read the result together with the lift and its "
+                         "intervals.",
+        }
+    return {
+        "informative": False, "n_events": n_events, "min_events": min_events,
+        "reason_tr": f"Bilgi vermiyor: hat yakınında yalnız {n_events} olay var; en az "
+                     f"{min_events} gerekir. Bu eşik, üst %20 kümesinde 2 katlık lifti tek "
+                     "yönlü kesin binom testiyle (α = 0,05) en az %80 güçle saptamak için "
+                     "gereken olay sayısıdır. Bu sonuç modeli ne doğrular ne çürütür.",
+        "reason_en": f"Not informative: only {n_events} near-line events; at least "
+                     f"{min_events} are needed. That is the number of events from which a "
+                     "one-sided exact binomial test (α = 0.05) has at least 80% power to "
+                     "detect lift 2 in the top 20% set. This result neither confirms nor "
+                     "refutes the model.",
+    }
 
 
 def _r(x: float | None, nd: int = DEC) -> float | None:
@@ -183,10 +275,117 @@ def _r(x: float | None, nd: int = DEC) -> float | None:
     return float(round(float(x), nd))
 
 
-# ------------------------------------------------------------------- data access
+# ----------------------------------------------------------- leakage declaration
+def _leading_date(value: Any) -> date | None:
+    """ISO date at the start of a release or snapshot label ('2026-10-21.0' -> 2026-10-21)."""
+    m = re.match(r"\s*(\d{4}-\d{2}-\d{2})", str(value)) if value else None
+    try:
+        return date.fromisoformat(m.group(1)) if m else None
+    except ValueError:
+        return None
+
+
+def _static_entry(layer: str, source: Any, release: Any, used_by: Sequence[str],
+                  basis: str, release_date: date | None = None) -> dict[str, Any]:
+    rdate = release_date or _leading_date(release)
+    tr, en = LAYER_LABELS.get(layer, (layer, layer))
+    return {"layer": layer, "label_tr": tr, "label_en": en,
+            "source": None if source is None else str(source),
+            "release": None if release is None else str(release),
+            "release_date": rdate.isoformat() if rdate else None,
+            "used_by": list(used_by), "basis": basis}
+
+
+def static_layers_after_as_of(features_meta: Mapping[str, Any],
+                              base_layers: Sequence[Mapping[str, Any]], as_of: date,
+                              chm_dates: Mapping[str, Any] | None = None
+                              ) -> list[dict[str, Any]]:
+    """Static inputs that are not shown to predate ``as_of`` (REV-F3F4 Y1).
+
+    Feature provenance entries without an observation time are grouped by input file and
+    declared when ``temporal_status`` contains "after_", when a release date
+    (``RELEASE_KEYS``) is on or after as_of, or when a ``static_<year>`` status is not
+    before the as_of year. Base layers (segments, district: MANIFEST access date) and the
+    CHM imagery (risk meta ``chm_dates``) are declared when their date is on or after
+    as_of or unknown."""
+    iso = as_of.isoformat()
+    groups: dict[str, dict[str, Any]] = {}
+    for name, prov in sorted((features_meta.get("provenance") or {}).items()):
+        prov = prov or {}
+        if prov.get("max_time_used_utc") is not None or prov.get("status") == "unavailable":
+            continue  # time-stamped (refused above when late) or not computed
+        status = str(prov.get("temporal_status") or "")
+        release = next((prov[k] for k in RELEASE_KEYS if prov.get(k)), None)
+        rdate = _leading_date(release)
+        reasons = []
+        if AFTER_STATUS_TOKEN in status:
+            reasons.append(f"temporal_status {status}")
+        if rdate is not None and rdate >= as_of:
+            reasons.append(f"release date {rdate.isoformat()} >= as_of {iso}")
+        year = re.fullmatch(r"static_(\d{4})", status)
+        if year and int(year.group(1)) >= as_of.year:
+            reasons.append(f"static year {year.group(1)} >= as_of year {as_of.year}")
+            release = release or year.group(1)
+        if not reasons:
+            continue
+        layer = Path(str(prov.get("file") or name)).stem
+        g = groups.setdefault(layer, {"source": prov.get("source"), "release": release,
+                                      "factors": [], "reasons": []})
+        g["factors"].append(name)
+        g["reasons"] += [r for r in reasons if r not in g["reasons"]]
+    out = []
+    for layer, g in groups.items():
+        used = [*g["factors"], *(f"baselines.{b}" for b, f in BASELINE_FACTORS.items()
+                                 if f in g["factors"])]
+        out.append(_static_entry(layer, g["source"], g["release"], used,
+                                 "; ".join(g["reasons"])))
+    if chm_dates is not None:
+        lo, hi = _leading_date(chm_dates.get("acq_min")), _leading_date(chm_dates.get("acq_max"))
+        used = [*CHM_FACTORS, "baselines.vegetation_chm"]
+        if hi is None:
+            out.append(_static_entry("chm", "meta_wri_chm", None, used,
+                                     "imagery date unknown; cannot show it predates as_of"))
+        elif hi >= as_of:
+            out.append(_static_entry("chm", "meta_wri_chm", f"{lo}…{hi}", used,
+                                     f"imagery dates up to {hi} >= as_of {iso}", hi))
+    for b in base_layers:
+        rdate = _leading_date(b.get("release"))
+        if rdate is None:
+            basis = "snapshot date unknown (no MANIFEST record); cannot show it predates as_of"
+        elif rdate >= as_of:
+            basis = f"snapshot (access) date {rdate.isoformat()} >= as_of {iso}"
+        else:
+            continue
+        out.append(_static_entry(str(b["layer"]), b.get("source"), b.get("release"),
+                                 b.get("used_by") or [], basis))
+    return out
+
+
+def base_layer_dates(root: Path, aoi_id: str) -> list[dict[str, Any]]:
+    """Snapshot dates of the static inputs behind segments and the district boundary.
+
+    The date is the MANIFEST access date (``tarih``) of the raw file; OSM is a live
+    database, so the access date is the snapshot date. Only rows of this AOI are used
+    (EDAŞ files are AOI-specific by definition); with several rows the latest date wins."""
+    rows = common.read_manifest(root)
+    out = []
+    for layer, (sources, used_by) in BASE_LAYERS.items():
+        hits = [r for r in rows if r.get("kaynak") in sources and (
+            r.get("kaynak") == "edas"
+            or f"/{aoi_id}/" in "/" + str(r.get("yerel_yol", "")).replace("\\", "/"))]
+        dated = sorted((d, str(r["kaynak"])) for r in hits
+                       if (d := _leading_date(r.get("tarih"))) is not None)
+        out.append({"layer": layer, "source": dated[-1][1] if dated else None,
+                    "release": dated[-1][0].isoformat() if dated else None,
+                    "used_by": list(used_by)})
+    return out
+
+
 def check_no_leakage(risk_meta: Mapping[str, Any], features_meta: Mapping[str, Any],
-                     cfg: BacktestConfig) -> AsOf:
-    """Refuse a risk map that is not the configured as_of map or that used later data."""
+                     cfg: BacktestConfig, base_layers: Sequence[Mapping[str, Any]] = ()
+                     ) -> LeakageCheck:
+    """Refuse a risk map that is not the configured as_of map or that used time-stamped
+    data at/after the cutoff; collect the static layers that do not predate as_of."""
     as_of = AsOf(cfg.as_of)
     if str(risk_meta.get("as_of")) != cfg.as_of.isoformat():
         raise BacktestLeakageError(f"risk map as_of {risk_meta.get('as_of')!r} != "
@@ -202,7 +401,65 @@ def check_no_leakage(risk_meta: Mapping[str, Any], features_meta: Mapping[str, A
         if latest is not None and pd.Timestamp(latest) >= as_of.cutoff_utc:
             raise BacktestLeakageError(f"{name}: data at {latest} is not before the as_of "
                                        f"cutoff {as_of.cutoff_utc.isoformat()}")
-    return as_of
+    static = static_layers_after_as_of(features_meta, base_layers, cfg.as_of,
+                                       risk_meta.get("chm_dates"))
+    return LeakageCheck(as_of=as_of, static_after_as_of=tuple(static))
+
+
+def _join(items: Sequence[str], last: str) -> str:
+    return items[0] if len(items) == 1 else f"{', '.join(items[:-1])} {last} {items[-1]}"
+
+
+def _layer_phrase(e: Mapping[str, Any], lang: str) -> str:
+    label = e["label_tr"] if lang == "tr" else e["label_en"]
+    src = SOURCE_LABELS.get(str(e.get("source")), e.get("source"))
+    when = e.get("release") or ("tarih bilinmiyor" if lang == "tr" else "date unknown")
+    return f"{label} ({src} {when})" if src else f"{label} ({when})"
+
+
+def _uses_building_baseline(static: Sequence[Mapping[str, Any]]) -> bool:
+    return any("baselines.buildings" in e.get("used_by", ()) for e in static)
+
+
+def leakage_block(check: LeakageCheck, features_meta: Mapping[str, Any]) -> dict[str, Any]:
+    """``leakage`` field of backtest.json: what predates the cutoff and what does not."""
+    prov = features_meta.get("provenance") or {}
+    tv = [{"layer": n, "max_time_used_utc": str(p["max_time_used_utc"])}
+          for n, p in sorted(prov.items()) if (p or {}).get("max_time_used_utc") is not None]
+    names = [t["layer"] for t in tv]
+    order = [n for n in TIME_VARYING_LABELS if n in names] + [
+        n for n in names if n not in TIME_VARYING_LABELS]
+    tv_tr = ", ".join(TIME_VARYING_LABELS.get(n, (n, n))[0] for n in order) or "yok"
+    tv_en = ", ".join(TIME_VARYING_LABELS.get(n, (n, n))[1] for n in order) or "none"
+    static = list(check.static_after_as_of)
+    iso = check.as_of.isoformat()
+    if not static:
+        note_tr = (f"Zamanla değişen veriler ({tv_tr}) kesimden öncedir; as_of'tan "
+                   f"({iso}) sonraya ait statik katman bulunmadı.")
+        note_en = (f"Time-varying inputs ({tv_en}) predate the cutoff; no static layer "
+                   f"dated after as_of ({iso}) was found.")
+    else:
+        note_tr = (f"Zamanla değişen veriler ({tv_tr}) kesimden öncedir; "
+                   f"{_join([_layer_phrase(e, 'tr') for e in static], 've')} katmanları "
+                   f"güncel anlık görüntüdür ve as_of'tan ({iso}) sonraya aittir. Bu "
+                   "katmanların sonuca etkisi ölçülmedi.")
+        note_en = (f"Time-varying inputs ({tv_en}) predate the cutoff; the "
+                   f"{_join([_layer_phrase(e, 'en') for e in static], 'and')} layers are "
+                   f"current snapshots dated after as_of ({iso}). Their effect on the "
+                   "result was not measured.")
+        if _uses_building_baseline(static):
+            note_tr += (" Bina yakınlığı taban çizgisi ve wui_exposure bu bina katmanına "
+                        "dayanır; katman as_of'taki değil sonraki durumu gösterdiği için "
+                        "bu taban çizgisinin sonucu iyimser olabilir.")
+            note_en += (" The building-proximity baseline and wui_exposure rely on this "
+                        "building layer, which shows a later state than as_of, so the "
+                        "baseline's result may be optimistic.")
+    return {"cutoff_utc": check.as_of.cutoff_utc.isoformat(),
+            "time_varying_before_cutoff": tv, "static_after_as_of": static,
+            "note_tr": note_tr, "note_en": note_en}
+
+
+# ------------------------------------------------------------------- data access
 
 
 def season_detections(firms: pd.DataFrame, cfg: BacktestConfig
@@ -254,11 +511,8 @@ def _rankings(risk: pd.DataFrame, features: pd.DataFrame, fmeta: Mapping[str, An
               root: Path) -> dict[str, np.ndarray]:
     """Percentile of every ranking compared (model, baselines, labelled variants)."""
     out = {"model": risk["risk_pct"].to_numpy(dtype="float64")}
-    for key, col in (("vegetation_chm", "norm_vegetation_encroachment"),
-                     ("tree_shrub_cover", "norm_fuel_continuity"),
-                     ("buildings", "norm_wui_exposure"),
-                     ("fire_history", "norm_fire_history")):
-        out[key] = mid_rank_percentile(risk[col].to_numpy(dtype="float64"))
+    for key, factor in BASELINE_FACTORS.items():
+        out[key] = mid_rank_percentile(risk[f"norm_{factor}"].to_numpy(dtype="float64"))
     out["linear"] = mid_rank_percentile(combine_risk(
         risk["p_ignition"].to_numpy(dtype="float64"),
         risk["consequence"].to_numpy(dtype="float64"), "linear"))
@@ -302,7 +556,8 @@ def run_backtest(aoi_id: str, root: Path | None = None) -> BacktestResult:
     interim = root / "data" / "interim" / aoi_id
     risk, rmeta = read_risk(proc / f"risk_{cfg.as_of.isoformat()}.parquet")
     features, fmeta = read_features(proc / f"features_{cfg.as_of.isoformat()}.parquet")
-    as_of = check_no_leakage(rmeta, fmeta, cfg)
+    leak = check_no_leakage(rmeta, fmeta, cfg, base_layer_dates(root, aoi_id))
+    as_of = leak.as_of
     if risk.crs is None:
         raise ValueError("risk parquet has no CRS")
     risk = risk.reset_index(drop=True)
@@ -382,6 +637,9 @@ def run_backtest(aoi_id: str, root: Path | None = None) -> BacktestResult:
     events = _events_frame(universe, max_frp, cfg)
     case = _case_studies(clusters, cfg)
     near = int(primary["n_events"])
+    lim_tr, lim_en = limitations(near, len(universe), cfg, chm_dates=rmeta.get("chm_dates"),
+                                 static_layers=leak.static_after_as_of,
+                                 type_filter=det_prov.get("type_filter") or {})
     summary = {
         "schema_version": SCHEMA_VERSION,
         "as_of": cfg.as_of.isoformat(),
@@ -389,14 +647,14 @@ def run_backtest(aoi_id: str, root: Path | None = None) -> BacktestResult:
         "n_events": near,
         "n_events_total": int(len(universe)),
         "event_line_distance_m": cfg.event_line_distance_m,
+        "verdict": verdict(near),
         **{_top_key(s): primary["model"][_top_key(s)] for s in cfg.top_shares},
         "baselines": baselines(primary),
         "sensitivity_line_distance": {
-            "label_tr": "DUYARLILIK ANALİZİ — birincil eşik değildir. Önceden kayıtlı "
-                        f"birincil eşik {cfg.event_line_distance_m:.0f} m'dir (ADR-013).",
-            "label_en": "SENSITIVITY ANALYSIS — not the primary threshold. The "
-                        f"pre-registered primary threshold is {cfg.event_line_distance_m:.0f} "
-                        "m (ADR-013).",
+            "label_tr": "DUYARLILIK ANALİZİ — birincil eşik değildir. Birincil eşik "
+                        f"{cfg.event_line_distance_m:.0f} m'dir (ADR-013).",
+            "label_en": "SENSITIVITY ANALYSIS — not the primary threshold. The primary "
+                        f"threshold is {cfg.event_line_distance_m:.0f} m (ADR-013).",
             "results": {
                 d: {"n_events": b["n_events"],
                     **{_top_key(s): b["model"][_top_key(s)] for s in cfg.top_shares},
@@ -443,13 +701,24 @@ def run_backtest(aoi_id: str, root: Path | None = None) -> BacktestResult:
                         "length share",
             "ci95": f"percentile bootstrap over events (B={cfg.bootstrap_n}, "
                     f"seed={cfg.bootstrap_seed}); ci95_binomial = Clopper-Pearson / expected",
+            "ci95_note": "ci95 is null exactly when ci95_note is set. "
+                         f"'{CI_NOTE_DEGENERATE}': k in {{0, n}}, every resample has the same "
+                         "share (read ci95_binomial); "
+                         f"'{CI_NOTE_NO_EVENTS}': n = 0; "
+                         f"'{CI_NOTE_EMPTY_TOP}': the ranking has no segment in the top set",
             "chance_baselines": "expected/length: lift of the model's top set if events fell "
                                 "on random segments (uniform / by length); ci95 = 95 % range "
                                 "of that null for this many events",
+            "verdict": VERDICT_RULE.format(n=MIN_EVENTS_INFORMATIVE),
+            "leakage": "time-stamped inputs at/after the cutoff are refused; static layers "
+                       "whose temporal_status says after_, whose release/snapshot/imagery "
+                       "date is >= as_of, or whose date is unknown are declared in "
+                       "leakage.static_after_as_of",
             "as_of_cutoff_utc": as_of.cutoff_utc.isoformat(),
         },
-        "limitations_tr": _limitations_tr(near, len(universe), cfg),
-        "limitations_en": _limitations_en(near, len(universe), cfg),
+        "leakage": leakage_block(leak, fmeta),
+        "limitations_tr": lim_tr,
+        "limitations_en": lim_en,
     }
     return BacktestResult(summary=summary, events=events)
 
@@ -459,7 +728,7 @@ def _top_key(share: float) -> str:
 
 
 def _baseline_view(b: Mapping[str, Any]) -> dict[str, Any]:
-    keep = ("share", "lift", "ci95", "expected", "n_in_top", "ci95_binomial",
+    keep = ("share", "lift", "ci95", "ci95_note", "expected", "n_in_top", "ci95_binomial",
             "p_value_binomial")
     return {k: b[k] for k in keep if k in b}
 
@@ -517,42 +786,113 @@ def _case_studies(clusters: pd.DataFrame, cfg: BacktestConfig) -> list[dict[str,
     }]
 
 
-def _limitations_tr(n: int, total: int, cfg: BacktestConfig) -> list[str]:
-    return [
-        f"Olay sayısı küçük: hat yakınında {n} olay (ilçede toplam {total} küme); güven "
-        "aralıkları geniştir ve sonuç istatistiksel olarak zayıftır.",
-        "FIRMS VIIRS pikseli ~375 m'dir; tespit tutuşma noktası değildir ve ilk uydu geçişi "
+def chm_limitation(chm_dates: Mapping[str, Any] | None, as_of: date) -> tuple[str, str]:
+    """CHM limitation sentence from the risk meta ``chm_dates`` (REV-F3F4 O1)."""
+    d = chm_dates or {}
+    lo, hi = _leading_date(d.get("acq_min")), _leading_date(d.get("acq_max"))
+    if lo is None or hi is None:
+        return ("CHM görüntü tarihleri bilinmiyor (risk meta verisinde chm_dates yok); ağaç "
+                "yüksekliği güncel olmayabilir.",
+                "CHM imagery dates are unknown (no chm_dates in the risk metadata); canopy "
+                "heights may be out of date.")
+    if hi >= as_of:
+        return (f"CHM görüntü tarihleri {lo}…{hi} arasıdır; bir kısmı as_of'tan sonradır "
+                "(leakage.static_after_as_of).",
+                f"CHM imagery dates are {lo}…{hi}; some imagery is dated after as_of "
+                "(leakage.static_after_as_of).")
+    new, old = ((as_of - x).days / 365.25 for x in (hi, lo))
+    return (f"CHM görüntü tarihleri {lo}…{hi} arasıdır (as_of'tan "
+            f"{f'{new:.1f}–{old:.1f}'.replace('.', ',')} yıl önce); ağaç büyümesi eksik "
+            "tahmin edilebilir.",
+            f"CHM imagery dates are {lo}…{hi} ({new:.1f}–{old:.1f} years before as_of); "
+            "tree growth may be underestimated.")
+
+
+def limitations(n: int, total: int, cfg: BacktestConfig, *,
+                chm_dates: Mapping[str, Any] | None,
+                static_layers: Sequence[Mapping[str, Any]],
+                type_filter: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """``limitations_tr`` and ``limitations_en`` (same order, same length)."""
+    tr: list[str] = []
+    en: list[str] = []
+
+    def add(t: str, e: str) -> None:
+        tr.append(t)
+        en.append(e)
+
+    if n < MIN_EVENTS_INFORMATIVE:
+        add(f"Olay sayısı küçük: hat yakınında {n} olay (ilçede toplam {total} küme; "
+            f"bilgi vermesi için en az {MIN_EVENTS_INFORMATIVE} gerekir); güven aralıkları "
+            "geniştir ve sonuç istatistiksel olarak zayıftır.",
+            f"Few events: {n} near-line events ({total} clusters in the district; at least "
+            f"{MIN_EVENTS_INFORMATIVE} are needed to inform); confidence intervals are wide "
+            "and the evidence is statistically weak.")
+    add("FIRMS VIIRS pikseli ~375 m'dir; tespit tutuşma noktası değildir ve ilk uydu geçişi "
         "tutuşmadan saatler sonra olabilir.",
-        "Nedeni bilinmeyen tüm yangınlar olaylara dahildir; çoğu hat kaynaklı değildir.",
-        "Tarım ve anız yakmaları gürültü katar; FIRMS type filtresi yalnız statik kaynak ve "
-        "deniz tespitlerini dışlar.",
-        "OSM hatlarının çoğu iletim hattıdır; dağıtım (OG/AG) hatları haritada yoktur. Dağıtım "
-        "hattı kaynaklı bir yangın 'hat yakını' sayılmayabilir.",
-        "CHM görüntü tarihleri 2016-07-22…2020-02-19 arasıdır (as_of'tan 5–9 yıl önce); ağaç "
-        "büyümesi eksik tahmin edilebilir.",
-        "Kademeler ve yüzdelikler AOI içinde görelidir; skor bir olasılık değildir.",
-        f"Birincil eşik {cfg.event_line_distance_m:.0f} m önceden kayıtlıdır; 1000 ve 2000 m "
-        "yalnız duyarlılık analizidir.",
-    ]
-
-
-def _limitations_en(n: int, total: int, cfg: BacktestConfig) -> list[str]:
-    return [
-        f"Few events: {n} near-line events ({total} clusters in the district); confidence "
-        "intervals are wide and the evidence is statistically weak.",
         "FIRMS VIIRS pixels are ~375 m; a detection is not the ignition point and the first "
-        "overpass may come hours after ignition.",
-        "All fires of unknown cause are included; most are not line-caused.",
+        "overpass may come hours after ignition.")
+    add("Nedeni bilinmeyen tüm yangınlar olaylara dahildir; çoğu hat kaynaklı değildir.",
+        "All fires of unknown cause are included; most are not line-caused.")
+    add("Tarım ve anız yakmaları gürültü katar; FIRMS type filtresi yalnız statik kaynak ve "
+        "deniz tespitlerini dışlar.",
         "Agricultural and stubble burning add noise; the FIRMS type filter only removes "
-        "static land sources and offshore detections.",
+        "static land sources and offshore detections.")
+    add("OSM hatlarının çoğu iletim hattıdır; dağıtım (OG/AG) hatları haritada yoktur. Dağıtım "
+        "hattı kaynaklı bir yangın 'hat yakını' sayılmayabilir.",
         "Most OSM lines are transmission lines; distribution (MV/LV) lines are missing, so a "
-        "fire started by a distribution line may not count as near-line.",
-        "CHM imagery dates are 2016-07-22…2020-02-19 (5–9 years before as_of); tree growth "
-        "may be underestimated.",
-        "Tiers and percentiles are relative within the AOI; the score is not a probability.",
-        f"The {cfg.event_line_distance_m:.0f} m primary threshold was pre-registered; 1000 "
-        "and 2000 m are sensitivity analyses only.",
-    ]
+        "fire started by a distribution line may not count as near-line.")
+    add(*chm_limitation(chm_dates, cfg.as_of))
+    if static_layers:
+        t = ("Statik katmanlar as_of'tan sonraki anlık görüntülerdir: "
+             f"{_join([_layer_phrase(e, 'tr') for e in static_layers], 've')}.")
+        e = ("Static layers are snapshots dated after as_of: "
+             f"{_join([_layer_phrase(x, 'en') for x in static_layers], 'and')}.")
+        if _uses_building_baseline(static_layers):
+            t += " Bina yakınlığı taban çizgisi bu bina katmanına dayanır ve iyimser olabilir."
+            e += (" The building-proximity baseline relies on this building layer and may "
+                  "be optimistic.")
+        add(t, e)
+    add("Kademeler ve yüzdelikler AOI içinde görelidir; skor bir olasılık değildir.",
+        "Tiers and percentiles are relative within the AOI; the score is not a probability.")
+    year = cfg.season[0].year
+    case = CASE_DAY.strftime("%d.%m.%Y")
+    if year == CASE_DAY.year:
+        add(f"Seçim yanlılığı: pilot ilçe ve senaryo günleri {case} yangını ve 2024–25 "
+            f"yangınları gerekçesiyle seçildi (ADR-006, ADR-012); backtest de aynı {year} "
+            "sezonunu kullanıyor. Test bölgesi sonuç bilinerek seçildiği için olumlu bir "
+            f"sonuç iyimser olurdu; çok yıllı testte {year} ayrı raporlanmalıdır.",
+            f"Selection bias: the pilot district and the scenario days were chosen because "
+            f"of the {case} fire and the 2024–25 fires (ADR-006, ADR-012), and the backtest "
+            f"uses the same {year} season. The test area was chosen with the outcome known, "
+            f"so a positive result would be optimistic; a multi-year test should report "
+            f"{year} separately.")
+    else:
+        add(f"Seçim yanlılığı: pilot ilçe {case} yangını gerekçesiyle seçildi (ADR-006); "
+            "sonuçlar başka ilçelere taşınmadan önce yeniden test edilmelidir.",
+            f"Selection bias: the pilot district was chosen because of the {case} fire "
+            "(ADR-006); results must be retested before they are carried to other districts.")
+    d = cfg.event_line_distance_m
+    dist, commit = PRIMARY_DISTANCE_SINCE
+    since_tr = (f"ilk iskelet commit'inden ({commit}) beri config'te sabittir" if d == dist
+                else "config'te tanımlıdır")
+    since_en = (f"has been fixed in config since the first skeleton commit ({commit})"
+                if d == dist else "is set in config")
+    if type_filter.get("type_column"):
+        k = sum(int(v) for v in (type_filter.get("n_excluded_by_type") or {}).values())
+        tf_tr = f"FIRMS type filtresi sezonda {k} tespit dışladı."
+        tf_en = f"The FIRMS type filter removed {k} season detections."
+    else:
+        tf_tr = "FIRMS dosyasında type sütunu yok; type filtresi uygulanmadı."
+        tf_en = "The FIRMS file has no type column; the type filter was not applied."
+    sens = [f"{x:.0f}" for x in cfg.sensitivity_distances_m]
+    add(f"Birincil eşik {d:.0f} m'dir ve {since_tr}. ADR-013 protokolünün geri kalanı "
+        "sonuçla aynı commit'te kaydedildi; protokolün sonuçtan önce yazıldığı depodan "
+        f"doğrulanamaz. {tf_tr} {_join(sens, 've')} m yalnız duyarlılık analizidir.",
+        f"The {d:.0f} m primary threshold {since_en}. The rest of the ADR-013 protocol was "
+        "committed in the same commit as the result, so the repository cannot show that it "
+        f"was written before the result. {tf_en} {_join(sens, 'and')} m are sensitivity "
+        "analyses only.")
+    return tr, en
 
 
 # --------------------------------------------------------------------------- files

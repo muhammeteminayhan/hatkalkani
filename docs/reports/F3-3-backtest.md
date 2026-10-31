@@ -3,6 +3,7 @@
 - **Model:** claude-opus-5-5 (Opus 5.5), risk-modeler
 - **Tarih:** 2026-10-31
 - **Protokol:** ADR-013, sonuçlar görülmeden kaydedildi. Parametreler config/risk_weights.yaml → `backtest`, birincil eşik `buffers_m.event_line_distance` = 500 m.
+  - **Düzeltme (FIX-F3, REV-F3F4 D2):** "Sonuç görülmeden" ifadesi depodan doğrulanamaz. 500 m eşiği ilk iskelet commit'inden (c423a81) beri config'te sabittir ve `type` filtresi sezonda 0 tespit dışladı. Protokol ise sonuçla aynı commit'te (abe3ebb) kaydedildi. Statik katman beyanı (Y1), `ci95: null` (O2), `verdict` alanı ve seçim yanlılığı (O4) için bkz. docs/reports/FIX-F3-backtest-duzeltme.md.
 - **Kod:** `src/hatkalkani/model/backtest.py`, testler `tests/model/test_backtest.py` (9 test, sentetik; sızıntı testi dahil).
 - **Çıktılar:** `data/processed/izmir_menderes/backtest.json`, `events_2025.geojson`. İki çalıştırmada sha256 aynı.
 

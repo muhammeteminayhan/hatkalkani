@@ -60,7 +60,7 @@ Sonuçlar / ödünleşimler: …
 - **Karar:** Koridor istatistikleri v2'den (`dinov3_global_chm_v2_ml3`) çıkarılır: 4 karo, ≈8 MB pencereli okuma.
 - **Ödünleşimler:** v2'de görüntü tarihi yok. v1 tarihleri (Menderes için 2016-07-22..2020-02-19) yalnızca referans. MODEL_CARD'a "CHM taban yılı bilinmiyor" yazılır. Piksel değerinin uint8 metre olduğu varsayımı F2 incelemesinde doğrulanır.
 - **Düzeltme (2026-10-31, CHM-META):** v2'nin `metadata/<karo>.geojson` dosyalarında her ayak izi için `properties.acq_date` alanı var.
-  - Menderes'in 4 karosunda örneklenen tarihler 2016-07-22 ile 2020-02-19 arasında.
+  - Menderes'in 4 karosunda örneklenen tarihler 2016-07-22 ile 2020-02-19 arasında. CHM-DATE'in tam sayımına göre geçerli aralık: segment tarihleri 2016-07-22…2020-02-18 (925/925 segment).
   - Karo içinde tarihler mozaik; tek bir görüntü yılı yok. Tam sayım yapılmadı.
   - "Taban yılı bilinmiyor" yerine bu aralık yazılır. Segment bazında tarih ingest'e eklenecek (docs/reports/CHM-META.md).
 
@@ -161,3 +161,23 @@ Sonuçlar / ödünleşimler: …
   - 29.06.2025 vakası (E2025_010, 441 tespit): vekil en yakın OSM hattına 2611 m, ilçe sınırının 263 m dışında. Hiçbir eşikte hat yakını değil.
   - Skora etki (F2-5b yeniden ingest'i, FIRMS uzatması ve `type` filtresi birlikte; F3-2 sürümüne göre): backtest haritasında Spearman 1,0000 (en büyük |Δrisk| 0,33), güncel haritada 0,9999 (0,90). İki haritada da kritik küme aynı.
   - Ayrıntı: docs/reports/F3-3-backtest.md. İyileştirme önce EDAŞ dağıtım hattı verisi, sonra çok yıllı (2016–2024) kayan backtest; ikisi de yeni bir protokol kaydı gerektirir.
+- **Ek not (FIX-F3, 2026-10-31, risk-modeler; REV-F3F4 Y1, O2, O4, D2):** Yalnız ekleme; yukarıdaki metin değiştirilmedi. Skor, ağırlık, kademe ve protokol parametreleri değişmedi; risk_*.parquet sha256 aynı.
+  - **Kayıt ifadesi (D2):** Başlıktaki ve bağlamdaki "sonuç görülmeden kayıtlı" ifadesi depodan doğrulanamaz.
+    - Doğrulanabilen: 500 m birincil eşik ilk iskelet commit'inden (c423a81) beri config/aoi.yaml'da sabit. FIRMS `type` filtresi 2025 sezonunda 0 tespit dışladı (fire_history'den yalnız 6 deniz tespiti düştü).
+    - Doğrulanamayan: ADR-013, `backtest` config bloğu, `type` filtresi, kod ve sonuç raporu aynı commit'te (abe3ebb) kaydedildi.
+    - İleride protokol, sonuçtan önce ayrı bir commit veya etiketle kaydedilecek.
+  - **Statik katman beyanı (Y1):** 9. maddedeki koruma yalnız zaman damgalı veriyi denetliyordu; statik katmanlar sessizce geçiyordu.
+    - `check_no_leakage` artık statik katmanları ayrı bir listede toplar. Ölçüt: `temporal_status` "after_" içerir, ya da sürüm, erişim (MANIFEST `tarih`) veya görüntü tarihi ≥ as_of'tur. Tarihi bilinmeyen hat, sınır ve CHM katmanları da beyan edilir.
+    - Bu katmanlar hata vermez (as_of tarihli bir anlık görüntü yok). backtest.json'da `leakage.static_after_as_of` alanına ve sınırlılıklara yazılır.
+    - 2025-05-31 haritası: binalar (Overture 2026-10-21.0; wui_exposure ve bina yakınlığı taban çizgisi), hatlar/segmentler ve ilçe sınırı (OSM, erişim 2026-10-30). Etkisi ölçülmedi; bina yakınlığı taban çizgisi iyimser olabilir.
+  - **Dejenere aralık (O2):** k ∈ {0, n} iken bootstrap aralığı tek noktaya çöker. Bu durumda `ci95: null` ve `ci95_note: "degenerate"` yazılır; Clopper–Pearson aralığı (`ci95_binomial`) korunur. backtest.json'da `ci95`, tam olarak `ci95_note` dolu olduğunda null'dır.
+  - **Karar alanı:** `verdict.informative` = (hat yakını olay sayısı ≥ `MIN_EVENTS_INFORMATIVE` = 38).
+    - Gerekçe: n ≥ 38'den itibaren tek yönlü kesin binom testi (α = 0,05) üst %20 kümesinde lift 2'yi (pay 0,40'a karşı 0,20) en az %80 güçle saptar. Kesin binom gücü n'ye göre testere dişi çizdiği için gücün bir daha 0,80'in altına düşmediği ilk n alındı (ilk kez 35'te aşılıyor).
+    - Eşik, 2025 sonucundan bağımsız bir güç hesabıdır. 2025 sezonunda n = 2 olduğundan makul her eşikte karar "bilgi vermiyor"dur.
+  - **Seçim yanlılığı (O4):** Pilot ilçe ve senaryo günleri 2025 yangını yüzünden seçildi (ADR-006, ADR-012); bu backtest aynı sezonu kullanıyor. Çok yıllı testte 2025 ayrı raporlanacak.
+
+## ADR-014 — K2: risk modeli v0.1 kabulü  (2026-10-31, kullanıcı — K2)
+- **Karar:** Kural tabanlı risk modeli v0.1, F3 sonuçlarıyla prototip ve başvuru için kabul edildi. Kullanıcının yanıtı: "Onayla, devam et". Sonuçlar: kademeler 46 / 139 / 278 / 462 (göreli), ağırlıklar ±%20 oynatıldığında Spearman ≥ 0,995, 76 iş paketi, 2025-06-29 kesinti senaryosu.
+- **Backtest:** 2025 sezonu bilgi vermiyor. Hatta 500 m içinde 2 olay var; karar için en az 38 olay gerekir (`backtest.json → verdict`). Sonuç olduğu gibi raporlanır; modeli ne doğrular ne çürütür.
+- **Seçilmeyen seçenek:** 2020–2024 çok yıllı backtest şimdi eklenmedi. Sızıntısız bir çok yıllı test as_of ≥ 2020-03 ister, çünkü CHM görüntüleri 2020-02-18'e kadar uzanıyor (ADR-008).
+- **Sonuç:** F3 kapanır. Ağırlık ve eşikler config'te parametre olarak kalır; saha görüşmeleri ve EDAŞ hat verisiyle yeniden değerlendirilecek.
