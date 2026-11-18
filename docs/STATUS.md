@@ -2,7 +2,7 @@
 
 Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonra ilk okunacak dosya budur.
 
-**Son güncelleme:** 2026-11-18 — **Portföy yayını (F5):** Kullanıcı projeyi herkese açık GitHub portföyüne koymak istedi; kararlar ADR-015'te. POR-1/2/3 ve QA-POR bitti; geçmiş noreply e-postasıyla yeniden yazılıp `muhammeteminayhan/hatkalkani` deposuna push ediliyor. Önceki durum (31 Eki): **Prototip hazır.** F3 ✅ (K2 onaylı, ADR-014). F4 düzeltmeleri commit'lendi (1ff143c) ve temiz klon testi geçti (qa-F4-final). Kullanıcıya toplantı tanıtım metni ve çalıştırma kılavuzu verildi. Sırada K3 (kullanıcı toplantıda ekranını paylaşıp demoyu gösterecek) ve başvuru taslağının son geçişi (son tarih 2 Kas 23:59). Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
+**Son güncelleme:** 2026-11-18 — **Portföy yayını (F5):** Kullanıcı projeyi herkese açık GitHub portföyüne koymak istedi; kararlar ADR-015'te. **F5 ✅:** geçmiş noreply e-postasıyla yeniden yazıldı ve herkese açık `muhammeteminayhan/hatkalkani` deposuna push edildi. İlk CI (ruff + pytest) ve Pages çalışmaları başarılı; canlı demo dosyaları 200 dönüyor (muhammeteminayhan.github.io/hatkalkani). Önceki durum (31 Eki): **Prototip hazır.** F3 ✅ (K2 onaylı, ADR-014). F4 düzeltmeleri commit'lendi (1ff143c) ve temiz klon testi geçti (qa-F4-final). Kullanıcıya toplantı tanıtım metni ve çalıştırma kılavuzu verildi. Sırada K3 (kullanıcı toplantıda ekranını paylaşıp demoyu gösterecek) ve başvuru taslağının son geçişi (son tarih 2 Kas 23:59). Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
 
 ## Fazlar
 | Faz | Durum | Not |
@@ -13,7 +13,7 @@ Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonr
 | F2 Veri hattı | ✅ | F2-1…F2-6, DOC-F2 ✅ · QA-F2 ✅ · REV-F2: Kritik 0, Yüksek 3 → FIX-F2 ✅ · commit'lendi · açık: ATTR-1 (web limiti), backlog'da 10 Orta ve 15 Düşük bulgu |
 | F3 Risk modeli | ✅ | F3-1 … F3-4 ✅ (abe3ebb) · REV-F3F4 ✅ · FIX-F3 ✅ (1ff143c) · **K2 ✅ 31 Eki:** kullanıcı v0.1'i bu sonuçlarla onayladı (backtest bilgi vermiyor: hat yakınında n = 2; çok yıllı test eklenmedi) |
 | F4 API + arayüz | 🔄 | F4-1 (a/b/c) ✅ · F4-2 (a/b/c) ✅ · F4-3 QA ✅ · FIX-F4A/F4W ve F4W-2 ✅ (1ff143c) · QA-CLONE ✅ (temiz klon) · K3: kullanıcı toplantıda ekran paylaşarak demoyu gösterecek |
-| F5 Portföy yayını | 🔄 | 18 Kas: kişisel veri temizliği, CI, GitHub Pages statik demo, README (TR/EN), MIT lisansı, geçmişin yeniden yazılması ve push (ADR-015) |
+| F5 Portföy yayını | ✅ | 18 Kas: kişisel veri temizliği, CI, GitHub Pages statik demo, README (TR/EN), MIT lisansı (ADR-015). Geçmiş git-filter-repo ile noreply e-postasına yeniden yazıldı (yedek: oturum scratchpad'inde `hatkalkani-pre-rewrite.bundle`); 13 commit, yayın commit'i 5fbc7ba. Push: github.com/muhammeteminayhan/hatkalkani · demo: muhammeteminayhan.github.io/hatkalkani. Eski hash'ler (1ff143c, d73b02e …) artık geçersiz |
 | F6 Final | — | 15–16 Kas; bu depoda kaydı yok |
 
 Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
