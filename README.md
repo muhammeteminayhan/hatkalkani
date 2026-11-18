@@ -1,117 +1,179 @@
 # HatKalkanı
 
-Elektrik dağıtım hatlarından kaynaklanan orman yangını riskini 100 m'lik hat parçası düzeyinde puanlayan karar destek aracı. COP31 İklim Teknolojileri Creathonu için geliştiriliyor.
+Elektrik hatlarından çıkabilecek orman yangını riskini 100 m'lik hat parçası düzeyinde puanlar ve budama ekibinin önce nereye gideceğini sıralar.
+
+[![CI](https://github.com/muhammeteminayhan/hatkalkani/actions/workflows/ci.yml/badge.svg)](https://github.com/muhammeteminayhan/hatkalkani/actions/workflows/ci.yml)
+[![Lisans: MIT](https://img.shields.io/badge/lisans-MIT-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
+
+**[Canlı statik demo](https://muhammeteminayhan.github.io/hatkalkani/)** · **[English README](README.en.md)**
+
+![HatKalkanı açılış ekranı: Menderes hatları risk kademesine göre renkli](docs/screens/01-acilis.png)
+
+COP31 İklim Teknolojileri Creathonu için geliştirildi (Ekim–Kasım 2026).
+
+> Demo, 31 Ekim 2026 çıktılarının sunucusuz bir anlık görüntüsüdür. Canlı hesap yerel kurulumda çalışır.
+
+## Problem
+
+- **Yanan alan büyük.** Türkiye'de 2025'te 3.224 orman yangını çıktı ve 81.473 ha alan yandı. Rakamlar OGM verisine atıflı haberlerden alındı; OGM'nin kendi yayını doğrulanamadı.
+- **Hatların payı sayıdan çok alanda görünüyor.** Bir uzmana göre elektrik hatları son 10 yılda yanan alanın yaklaşık dörtte birine karşılık geliyor. Bir akademisyenin 2021 hesabında yangın sayısındaki pay %3,2, yanan alandaki pay yaklaşık dörtte bir (37.358 ha / ~140.000 ha). İkisi de uzman ifadesidir; resmî kaynak bulunamadı.
+- **Mevzuat sıkılaştı.** EPDK'nın 2026–2030 tarife döneminde ormanlık alandaki tesislerin bakımı yıllık, budama ve temizlik zorunlu oldu; aksatana ceza öngörüldü.
+- **Önleyici kesintiler geniş kapsamlı.** GDZ Elektrik (İzmir) Haziran 2025 sonunda kuvvetli rüzgâr nedeniyle önleyici zorunlu kesinti uyguladığını duyurdu. Mersin'de 2025'teki tedbir kesintileri kent merkezini de etkiledi.
+- **Resmî tespit yok.** İzmir'de 2025'te Menderes, Çeşme ve Ödemiş yangınları için valilik açıklamaları ve medyada aktarılan itfaiye raporu iddiaları var. Resmî veya yargısal bir tespit yapılmadı. HatKalkanı hiçbir hattı yangın nedeni olarak göstermez.
+
+Kaynaklar, düzeltme notları ve doğrulama durumları: [docs/PITCH_FACTS.md](docs/PITCH_FACTS.md).
 
 ## Ne yapar
 
-- **Koridor risk haritası:** 0–100 skor ve skoru yükselten 3 neden
-- **Budama/drone iş emri listesi:** CSV, GeoJSON ve GeoPackage
-- **Önleyici kesinti senaryosu:** rüzgârlı günde ilçenin tamamı yerine yalnızca riskli hatlar
-- **Geriye dönük test:** 2025 yangın sezonu
+1. **Koridor risk haritası.** Her 100 m'lik parçaya 0–100 arası bir öncelik skoru ve skoru en çok yükselten ilk 3 neden (Shapley katkısı) verir.
+2. **Budama/drone iş emri listesi.** Ardışık riskli parçaları açıklıklara birleştirip sıralar. CSV, GeoJSON ve GeoPackage olarak indirilir.
+3. **Önleyici kesinti senaryosu.** Rüzgârlı bir günde "ilçenin tamamı" ile "yalnızca riskli hatlar" seçeneğini hat-km ve etkilenen bina (vekil) olarak karşılaştırır.
 
-Pilot ilçe: İzmir Menderes (`izmir_menderes`). Senaryo ve geriye dönük test aşamaları şu anda ekleniyor; hazır olmayan çıktılar arayüzde "henüz hesaplanmadı" olarak görünür.
+Ayrıca 2025 yangın sezonu üzerinde **geriye dönük test** yapar ve sonucu olduğu gibi raporlar.
 
-## Claude Code ile çalışma
-Bu depo, Claude Code masaüstünde çok ajanlı çalışmak üzere hazırlanmıştır.
+| İş listesi ve detay | Senaryo | Doğrulama |
+|---|---|---|
+| ![İş listesi ve parça detayı](docs/screens/02-is-listesi-detay.png) | ![Kesinti senaryosu](docs/screens/07-senaryo.png) | ![Geriye dönük test sekmesi](docs/screens/09-dogrulama.png) |
 
-1. Önce `MANUAL_TASKS.md` dosyasındaki "Başlamadan önce" adımlarını tamamlayın.
-2. `KICKOFF_PROMPT.md` dosyasındaki ilk mesajı ana oturuma yapıştırın.
-3. Sonraki oturumlarda aynı dosyadaki kısa devam mesajını kullanın.
+## Nasıl çalışır
 
-| Dosya | İçerik |
-|---|---|
-| `CLAUDE.md` | Ana oturumun (orkestratör) protokolü ve model yönlendirme tablosu |
-| `.claude/agents/` | 10 alt ajan; her birinin modeli ve effort'u burada |
-| `.claude/skills/` | Ajanlara önceden yüklenen bilgi paketleri ve `/durum` komutu |
-| `docs/PLAN.md` | Fazlar, görevler, kabul kriterleri, kontrol noktaları |
-| `docs/STATUS.md` | Canlı durum panosu |
+```mermaid
+flowchart LR
+    A["Açık veri<br/>OSM, CHM, Sentinel-2, DEM,<br/>WorldCover, Overture, FIRMS, Open-Meteo"] --> B["ingest<br/>önbellek ve MANIFEST"]
+    B --> C["as_of özellikleri<br/>zaman sızıntısı denetimi"]
+    C --> D["Skor 0-100<br/>Shapley ile ilk 3 neden"]
+    D --> E["İş emri"]
+    D --> F["Kesinti senaryosu"]
+    D --> G["Geriye dönük test"]
+    E --> H["FastAPI"]
+    F --> H
+    G --> H
+    H --> I["MapLibre arayüzü"]
+```
 
-## Gereksinimler
+- **as_of özellikleri:** Her özellik bir kesit tarihine göre hesaplanır. Kesitten sonraki zaman damgalı veri kullanılırsa test hata verir.
+- **Skor:** Tutuşma vekili (P) ile sonuç/yayılım vekilinin (C) geometrik birleşimi: `risk = 100·√(P·C)`. Ağırlıklar uzman varsayımıdır; kural tabanlı ilk modeldir, ML eğitimi yoktur. Ayrıntı: [docs/MODEL_CARD.md](docs/MODEL_CARD.md).
+- **Sunucu:** Çalışırken ağ çağrısı yapmaz; tüm çıktılar önceden hesaplanır. API sözleşmesi: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-| Gereksinim | Ayrıntı |
-|---|---|
-| Python | 3.12 (`pyproject.toml`: `>=3.12,<3.14`). Geliştirme ortamı 3.12.16 (`docs/STATUS.md`, F0-2) |
-| uv | Bağımlılık ve çalıştırma aracı. Kurulum: https://docs.astral.sh/uv/ . Geliştirmede 0.13.6 kullanıldı |
-| Disk alanı | Yaklaşık 1,05 GB: `data/` 394 MB + `.venv` 653 MB (pilot ilçe; qa-F4 ölçümü, 31 Eki 2026) |
-| İnternet | Yalnızca veri indirme için. Sunucu çalışırken ağ çağrısı yapmaz |
-| FIRMS_MAP_KEY | Ücretsiz NASA FIRMS anahtarı: https://firms.modaps.eosdis.nasa.gov/api/map_key/ . Anahtar `.env` dosyasına yazılır; değeri bu README'ye, koda veya sohbete yazılmaz |
-| İşletim sistemi | Hedef Windows ve macOS. Geliştirme Windows 11'de yapıldı (`docs/STATUS.md`, F0-4) |
-| Node.js | Uygulama için gerekmez; yalnızca Playwright MCP testleri için |
+### Veri kaynakları
+
+| Veri | Ne için | Lisans |
+|---|---|---|
+| OpenStreetMap (Overpass): havai hatlar, ilçe sınırı | Hat parçaları | ODbL 1.0 |
+| Meta/WRI CHM v2: ağaç yüksekliği | Hatta yakın ve devrilebilir ağaç | CC BY 4.0 |
+| Sentinel-2 L2A | Kuruluk (NDMI) | Copernicus açık veri |
+| Copernicus DEM GLO-30 | Eğim, topoğrafik açıklık | Copernicus DEM lisansı |
+| ESA WorldCover v200 | Yakıt sürekliliği | CC BY 4.0 |
+| Overture Maps: binalar | Yerleşime yakınlık, etkilenen bina | ODbL |
+| NASA FIRMS VIIRS | Yangın geçmişi, test olayları | NASA açık veri |
+| Open-Meteo arşivi | Rüzgâr hamlesi | CC BY 4.0 |
+
+Atıf metinleri ve bağlantılar: [docs/ATTRIBUTIONS.md](docs/ATTRIBUTIONS.md).
+
+## Pilot sonuçları: İzmir Menderes
+
+Kaynak: `data/processed/izmir_menderes/` çıktıları; her satırın dosya ve alanı [docs/PITCH_FACTS.md](docs/PITCH_FACTS.md) #26–#41'de.
+
+- **Hat ağı:** 92,4 km havai hat, 925 parça. 61,0 km'si ≥154 kV; kalan 31,4 km'de OSM'de gerilim etiketi yok.
+- **Kademeler (göreli):** kritik 46, yüksek 139, orta 278, düşük 462 parça.
+- **İş emri:** 76 öncelikli açıklık. İlk üçü:
+
+| Sıra | Açıklık | Gerilim | Uzunluk | En yüksek risk | Ana neden |
+|---|---|---|---|---|---|
+| 1 | 187664557_0001-0017 | 154 kV | 1.700 m | 77,64 | hatta yakın yüksek ağaç |
+| 2 | 1181160379_0028-0031 | etiketsiz | 400 m | 73,48 | kesintisiz orman/maki |
+| 3 | 1181160379_0111-0118 | etiketsiz | 800 m | 72,04 | hatta yakın yüksek ağaç |
+
+- **Kesinti senaryosu** (29.06.2025, rüzgâr eşiği 50 km/sa, en düşük kademe yüksek):
+
+| Kesinti birimi | Hat | Etkilenen bina (vekil) | Risk payı |
+|---|---|---|---|
+| İlçe geneli | 92,4 km | 3.469 | - |
+| Hedefli, OSM hattı birimi | 83,4 km | 3.032 | %91,7 |
+| Aday parça birimi (alt sınır) | 18,5 km | 993 | %26,0 |
+
+  Hedefli kesinti neredeyse ilçe geneline eşit, çünkü kesinti birimi OSM hattıdır ve hatlar uzun iletim hatlarıdır. Gerçek birim EDAŞ fideridir; şebeke topolojisi olmadan 18,5 km iddia edilmez, yalnızca alt sınırdır.
+- **Geriye dönük test** (2025 sezonu): ilçede 10 olay kümesi var. Hatta 500 m içinde yalnızca 2 olay düşüyor. Bu 2 olay üst %10'luk ve üst %20'lik kümelerde değil (isabet 0 ve 0). **Test bilgi vermiyor:** model ne doğrulandı ne çürütüldü.
+
+## Dürüstlük ve sınırlılıklar
+
+- **Kademeler görelidir.** Kritik, ilçedeki en yüksek %5 demektir (46 / 925 parça). Mutlak tehlike düzeyi değildir; ilçeler veya tarihler arasında karşılaştırılamaz.
+- **OSM hatlarının çoğu iletim hattıdır.** Hat kaynaklı yangınların çıkabileceği dağıtım hatları haritada yok. Dağıtım şebekesi için sonuç iddia edilmez; EDAŞ hat dosyası gelirse (`data/manual/edas/`) o kullanılır.
+- **Geriye dönük test bilgi vermiyor.** Hatta yakın yalnızca 2 olay var; testin bilgi vermesi için en az 38 gerekir (`backtest.json → verdict`). Ağırlıklar bu sonuca bakılarak ayarlanmadı. Pilot ilçe ve gün, 2025 yangınları bilinerek seçildi; olumlu bir sonuç iyimser okunmalıdır.
+- **Ağaç yüksekliği eski olabilir.** CHM görüntüleri 2016–2020 tarihli; büyüme eksik tahmin edilebilir, budanan ağaçlar hâlâ yüksek görünebilir.
+- **Statik katmanlar as_of sonrasına ait.** Bina (Overture 2026-10-21.0) ve hat/sınır (OSM, 2026-10-30) güncel anlık görüntüdür; 2025-05-31 haritası da bunları kullanır. Etkisi ölçülmedi ve `backtest.json → leakage` alanında beyan edilir.
+- **Çıktı bir önceliktir, kesin hüküm değil.** Skor yangın olasılığı değildir. Bir hattın yangına yol açtığını, yönetmelik ihlalini veya sorumluluğu göstermez; her iş emri sahada gözle doğrulanmalıdır. Config'teki açıklık bantları model varsayımıdır, doğrulanmış yönetmelik değeri değildir ([docs/REGULATION_NOTES.md](docs/REGULATION_NOTES.md)).
 
 ## Hızlı başlangıç
 
-> Bu adımlar temiz bir makinede henüz denenmedi: **doğrulanmadı**.
-
-1. Depo klasöründe bir terminal açın ve bağımlılıkları kurun:
+Gereksinimler: Python 3.12, [uv](https://docs.astral.sh/uv/), ücretsiz bir [NASA FIRMS anahtarı](https://firms.modaps.eosdis.nasa.gov/api/map_key/). Disk: `data/` 394 MB + `.venv` 653 MB. Node.js gerekmez. Hedef platform Windows ve macOS; geliştirme Windows 11'de yapıldı.
 
 ```
 uv sync
-```
-
-2. `.env.example` dosyasını `.env` adıyla kopyalayın ve `FIRMS_MAP_KEY` değerini kendi anahtarınızla doldurun. `.env` git'e girmez; anahtarı kimseyle paylaşmayın.
-
-3. Veri hattını baştan sona çalıştırın:
-
-```
+cp .env.example .env        # Windows: copy .env.example .env; FIRMS_MAP_KEY değerini doldurun
 uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage all
-```
-
-Sonunda `MANIFEST validation OK` satırı görünmelidir.
-
-4. Sunucuyu başlatın:
-
-```
 uv run python scripts/serve.py
-```
-
-5. Tarayıcıda açın: http://127.0.0.1:8000
-   Mock veriyle denemek için: http://127.0.0.1:8000/?mock=1
-
-6. Testleri çalıştırın:
-
-```
 uv run pytest
 ```
 
-Ağ gerektiren testler varsayılan çalıştırmada atlanır.
+Tarayıcıda http://127.0.0.1:8000 açın. `.env` git'e girmez; anahtarı paylaşmayın.
 
-### İlk çalıştırma ve önbellek
+- **Aşamalar:** `--stage ingest | features | score | scenario | backtest | all`. `--only <modül>` ve `--force` yalnız ingest içindir. Sunucu seçenekleri: `--host`, `--port`, `--aoi`.
+- **İlk çalıştırma uzundur.** Veri indirilir; yalnızca FIRMS'in ilk indirmesi yaklaşık 25 dakika sürdü. Sonraki çalıştırmalar önbellekten gelir.
+- **Veri depoda yok.** `data/` git dışıdır; arayüz, pipeline çalıştıktan sonra veri gösterir. Ağ gerektiren 2 test varsayılan çalıştırmada atlanır.
+- **Statik demoyu yerelde açmak:** Veri ve kurulum gerekmez: `python -m http.server 8080 -d web`, ardından http://localhost:8080. `file://` ile açmayın; tarayıcı yerel dosyadan JSON okumayı engeller.
+- **Statik mod:** API'ye ulaşılamazsa (GitHub Pages, düz statik sunucu) arayüz `web/mock/` altındaki 31 Ekim 2026 çıktı anlık görüntüsüyle çalışır ve bunu üst bantta belirtir. Bu modda senaryo eşiği önceden hesaplanmış değerlere (30–90 km/sa, 5'er) oturur. `?mock=1` aynı modu canlı sunucuda da açar; anlık görüntüyü `scripts/make_static_scenarios.py` üretir.
+- **Çevrimdışı:** MapLibre dosyaları `web/vendor/` altındadır. Çevrimiçi altlık gelmezse düz zemin, ilçe sınırı ve hatlar gösterilir.
 
-- **İlk çalıştırma uzundur**, çünkü veri indirilir. FIRMS'in ilk indirmesi yaklaşık 25 dakika sürdü (`docs/STATUS.md`, F2-5). Temiz kurulumda toplam süre henüz ölçülmedi; temiz klon provasında ölçülecek. Önbellekten `--stage all` 140 sn sürdü (qa-F4, 31 Eki 2026).
-- **Sonraki çalıştırmalar önbellekten gelir.** Önbellekten tüm ingest 29,2 sn; features 13,6 sn; score 3,0 sn (`docs/STATUS.md`, F2-6, F3-1, F3-2).
+## Ölçülen değerler
 
-### Pipeline seçenekleri
+| Ölçü | Değer | Kaynak |
+|---|---|---|
+| Test | 233 geçti, 2 ağ testi seçilmedi (39 sn, temiz klon) | [qa-F4-final](docs/reports/qa-F4-final.md) |
+| Pipeline, önbellekten `--stage all` | 140,1 sn | [qa-F4](docs/reports/qa-F4.md) |
+| Arayüz ilk açılış (`window.__hk.ready`) | 526 ms | [qa-F4](docs/reports/qa-F4.md) |
 
-- `--stage ingest | features | score | all`: `features` ve `score` önceki aşamaların çıktılarını bekler.
-- `--only <modül>`: yalnızca ingest aşamasında. Modüller: `boundary`, `lines`, `segments`, `sentinel2`, `dem`, `worldcover`, `chm`, `buildings`, `firms`, `weather`.
-- `--force`: seçili ingest çıktılarını silip yeniden üretir.
+Temiz klon testinde veri ana klasörden kopyalandı; sıfırdan ingest yeni bir makinede denenmedi.
+
+## Proje yapısı
 
 ```
-uv run python scripts/run_pipeline.py --aoi izmir_menderes --stage ingest --only firms
+src/hatkalkani/   ingest/ features/ model/ api/ export/
+scripts/          run_pipeline.py, serve.py
+config/           aoi.yaml, risk_weights.yaml, sources.yaml
+web/              tek sayfa arayüz (MapLibre, derleme adımı yok)
+tests/            pytest
+docs/             belgeler, raporlar, ekran görüntüleri
+data/             raw, interim, processed (git dışı)
+.claude/          alt ajan tanımları ve skill'ler
 ```
 
-Sunucu seçenekleri `--host`, `--port` ve `--aoi`'dir:
+## Teknoloji yığını
 
-```
-uv run python scripts/serve.py --host 127.0.0.1 --port 8001
-```
+Python 3.12 ve uv · GeoPandas, Shapely, Rasterio, xarray · pyarrow, DuckDB · FastAPI, Uvicorn · MapLibre GL JS (yerel kopya) · pytest, ruff · GitHub Actions (ruff ve pytest).
 
-## Arayüz
+## Yapay zekâ destekli geliştirme
 
-- **Sol panel, sekmeler:** İş listesi · Senaryo · Doğrulama · Hakkında. Senaryo ve Doğrulama, ilgili dosyalar yoksa "henüz hesaplanmadı" gösterir (ADR-011).
-- **Orta:** harita. **Sağ:** detay çekmecesi. **Üst bant:** 3 sayaç. **Alt bilgi:** atıflar.
-- **Dil:** TR/EN düğmesiyle değişir.
-- **Çevrimdışı:** MapLibre dosyaları `web/vendor/` altında yereldir. Çevrimiçi altlık yanıt vermezse (4 sn zaman aşımı) düz arka plan, ilçe sınırı ve hat katmanları gösterilir; alt bilgi bunu belirtir (`docs/ATTRIBUTIONS.md`).
-- Senaryo ve Doğrulama sekmeleri gerçek API verisiyle denendi (qa-F4, 31 Eki 2026). Mock modu (`?mock=1`) yalnız arayüz geliştirme içindir; değerleri uydurmadır ve sayfada "MOCK" bandı görünür.
+Proje Claude Code ile çok ajanlı bir düzende geliştirildi. Kurallar [CLAUDE.md](CLAUDE.md) ve [.claude/agents/](.claude/agents/) altındadır.
 
-## Dürüstlük notları
+- **Rol ve model yönlendirmesi:** 10 alt ajan. Arama, test ve belge işleri Haiku'ya; veri, API ve arayüz kodu Sonnet'e; risk modeli ve kod incelemesi Opus'a verildi. Her iş yapabilecek en ucuz ajana gitti.
+- **Handoff raporları:** Her görev kısa bir teslim raporuyla bitti; ayrıntılar [docs/reports/](docs/reports/) altında.
+- **Faz sonu denetimi:** Her faz sonunda QA turu ve ayrı bir kod incelemesi yapıldı. İnceleme, geriye dönük testin kesitten sonra yayımlanmış statik katmanlar kullandığını buldu; bu beyan edildi ([review-F3F4](docs/reports/review-F3F4.md)).
+- **Sızıntı testleri:** Kesitten sonraki veriyi yakalayan testler [tests/features/test_leakage.py](tests/features/test_leakage.py) ve [tests/model/test_score_leakage.py](tests/model/test_score_leakage.py) içindedir.
 
-- **Kademeler görelidir.** Kritik kademe her zaman yaklaşık %5 çıkar (pilotta 46 / 925 segment; ADR-010, `docs/STATUS.md`, F3-2). Mutlak tehlike düzeyi değildir.
-- **Çıktı bir öncelik sıralamasıdır**, kesin hüküm değildir.
-- **OSM hatlarının çoğu iletim hattıdır.** 92,4 km hattın 61,0 km'si ≥154 kV; kalanında OSM'de gerilim etiketi yok (ADR-006; `docs/PITCH_FACTS.md` #27). Dağıtım şebekesi için sonuç iddia edilmez. EDAŞ dosyası `data/manual/edas/` altındaysa o kullanılır.
-- **Yangın kaynağı bildirildi, tespit edilmedi.** 2025 Menderes, Çeşme ve Ödemiş yangınlarının hat kaynaklı olduğu yalnızca medya ve valilik aktarımında geçiyor; resmî tespit yok (ADR-006, `docs/STATUS.md`, F1-3).
-- **Ağaç yüksekliği eski olabilir.** CHM v2 karolarının görüntü tarihleri 2016–2020 arasında karışık; güncel büyüme eksik tahmin edilebilir (ADR-008, `docs/reports/CHM-META.md`).
+Yapay zekâ çıktısı araçtır; doğruluktan ekip sorumludur. Metinlerdeki sayılar kaynaklarıyla [docs/PITCH_FACTS.md](docs/PITCH_FACTS.md) içinde izlenir ve hatalı bulunan iddialar orada düzeltildi.
 
-## Kaynaklar
+## Belgeler, lisans ve atıflar
 
-Veri, yazılım ve görsel atıfları, lisanslar ve bağlantılar: `docs/ATTRIBUTIONS.md`. Copernicus DEM atıf metni doğrulandı (ATTR-1b, 31 Eki 2026); CHM v2 Maxar satırı hâlâ [DOĞRULANMADI].
+| Belge | İçerik |
+|---|---|
+| [docs/PRD.md](docs/PRD.md) | Ürün tanımı ve kabul kriterleri |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Veri akışı ve API sözleşmesi |
+| [docs/MODEL_CARD.md](docs/MODEL_CARD.md) | Faktörler, ağırlıklar, sınırlılıklar |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Karar kayıtları (ADR) |
+| [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) | Veri kaynakları, sürümler, erişim tarihleri |
+| [docs/PITCH_FACTS.md](docs/PITCH_FACTS.md) | Kaynaklı sayılar ve düzeltme notları |
+| [docs/reports/](docs/reports/) | Görev, QA ve inceleme raporları |
+
+**Lisans:** Kod [MIT](LICENSE) lisanslıdır. Veri çıktıları kaynaklarının lisanslarına tabidir; OSM ve Overture türevleri ODbL kapsamındadır. Lisanslar ve atıflar: [docs/ATTRIBUTIONS.md](docs/ATTRIBUTIONS.md).

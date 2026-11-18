@@ -2,7 +2,7 @@
 
 Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonra ilk okunacak dosya budur.
 
-**Son güncelleme:** 2026-10-31 19:16 — **Prototip hazır.** F3 ✅ (K2 onaylı, ADR-014). F4 düzeltmeleri commit'lendi (1ff143c) ve temiz klon testi geçti (qa-F4-final). Kullanıcıya toplantı tanıtım metni ve çalıştırma kılavuzu verildi. Sırada K3 (kullanıcı toplantıda ekranını paylaşıp demoyu gösterecek) ve başvuru taslağının son geçişi (son tarih 2 Kas 23:59). Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
+**Son güncelleme:** 2026-11-18 — **Portföy yayını (F5):** Kullanıcı projeyi herkese açık GitHub portföyüne koymak istedi; kararlar ADR-015'te. POR-1/2/3 ve QA-POR bitti; geçmiş noreply e-postasıyla yeniden yazılıp `muhammeteminayhan/hatkalkani` deposuna push ediliyor. Önceki durum (31 Eki): **Prototip hazır.** F3 ✅ (K2 onaylı, ADR-014). F4 düzeltmeleri commit'lendi (1ff143c) ve temiz klon testi geçti (qa-F4-final). Kullanıcıya toplantı tanıtım metni ve çalıştırma kılavuzu verildi. Sırada K3 (kullanıcı toplantıda ekranını paylaşıp demoyu gösterecek) ve başvuru taslağının son geçişi (son tarih 2 Kas 23:59). Kullanıcı yönü (31 Eki): çalışan prototip 1 Kas sabahına kadar bitecek; sunum ve başvuru cilası sonra.
 
 ## Fazlar
 | Faz | Durum | Not |
@@ -13,20 +13,24 @@ Orkestratör günceller. Oturum başında ve bağlam sıkıştırıldıktan sonr
 | F2 Veri hattı | ✅ | F2-1…F2-6, DOC-F2 ✅ · QA-F2 ✅ · REV-F2: Kritik 0, Yüksek 3 → FIX-F2 ✅ · commit'lendi · açık: ATTR-1 (web limiti), backlog'da 10 Orta ve 15 Düşük bulgu |
 | F3 Risk modeli | ✅ | F3-1 … F3-4 ✅ (abe3ebb) · REV-F3F4 ✅ · FIX-F3 ✅ (1ff143c) · **K2 ✅ 31 Eki:** kullanıcı v0.1'i bu sonuçlarla onayladı (backtest bilgi vermiyor: hat yakınında n = 2; çok yıllı test eklenmedi) |
 | F4 API + arayüz | 🔄 | F4-1 (a/b/c) ✅ · F4-2 (a/b/c) ✅ · F4-3 QA ✅ · FIX-F4A/F4W ve F4W-2 ✅ (1ff143c) · QA-CLONE ✅ (temiz klon) · K3: kullanıcı toplantıda ekran paylaşarak demoyu gösterecek |
-| F5 Demo cilası + sunum | ⬜ | |
-| F6 Final | ⬜ | 15–16 Kas |
+| F5 Portföy yayını | 🔄 | 18 Kas: kişisel veri temizliği, CI, GitHub Pages statik demo, README (TR/EN), MIT lisansı, geçmişin yeniden yazılması ve push (ADR-015) |
+| F6 Final | — | 15–16 Kas; bu depoda kaydı yok |
 
 Durum simgeleri: ⬜ başlamadı · 🔄 sürüyor · ✅ bitti · ⛔ engelli
 
 ## Aktif görevler
 | ID | Ajan | Durum | Sahip olduğu dosyalar | Rapor |
 |---|---|---|---|---|
-| — | (sahipsiz, kimse değiştirmiyor) | — | src/, tests/, web/, scripts/, config/sources.yaml, config/risk_weights.yaml | — |
+| — | (sahipsiz, kimse değiştirmiyor) | — | src/ (ingest/common.py hariç), scripts/, config/ | — |
 | — | orkestratör | sürekli | docs/STATUS.md, MANUAL_TASKS.md, docs/DECISIONS.md, docs/PLAN.md, config/aoi.yaml, .env.example | — |
 
 ## Biten görevler
 | ID | Ajan | Sonuç | Rapor |
 |---|---|---|---|
+| QA-POR | qa-tester (Haiku 5.5) | pytest 233 geçti; canlı ve statik mod, alt yol (`/hatkalkani/`) ve README bağlantıları (32) çalışıyor. Ruff E501 (5, `scripts/make_static_scenarios.py`) orkestratör tarafından `ruff format` ile giderildi. "Eşik 17→50 değişmiyor" hata değil: 29 Haz'da tüm parçalarda hamle >63 km/sa | docs/reports/qa-POR.md |
+| POR-3 | pitch-writer (Sonnet 5.5) | README.md (TR) yeniden yazıldı, README.en.md eklendi; 13 bölüm, sayılar PITCH_FACTS ve QA raporlarından. Orkestratör statik demo satırını, statik mod açıklamasını ve senaryo km yuvarlamasını düzeltti | handoff |
+| POR-2 | frontend-dev (Sonnet 5.5) | Statik demo modu: github.io, düz statik sunucu ya da API'ye ulaşılamaması durumunda `web/mock/` anlık görüntüsüyle çalışıyor. Bant ve rozet "31 Ekim 2026 anlık görüntüsü" diyor. Senaryo için 4 gün × eşik 30–90 (5'er) × 3 kademe önceden üretildi (`scripts/make_static_scenarios.py`, +444 KB). Pages iş akışı eklendi. POR-2b: filigran kaldırıldı, sayfa kaydırması giderildi (1920×1080 ve 1366×768) | handoff |
+| POR-1 | data-engineer (Sonnet 5.5) | User-Agent'tan kişisel e-posta kaldırıldı (`HATKALKANI_CONTACT` isteğe bağlı). CI iş akışı (ruff + pytest) ve .gitattributes eklendi. ruff temiz; pytest 233 geçti; verisiz klonda 220 geçti, 13 atlandı; izlenen dosyalarda e-posta yok | handoff |
 | QA-CLONE | qa-tester (Haiku 5.5) | 1ff143c temiz klonda geçti, kırmızı adım yok. `uv sync` 6 sn; ruff temiz; pytest 233 geçti, 2 seçilmedi (39 sn). Pipeline features→backtest çıkış kodu 0. backtest.json ve scenario sha256 aynı; iki risk parquet'i bayt olarak farklı, içerik (pyarrow) aynı. Sunucuda 15 istek 200 döndü. Playwright 1920×1080: 4 sekme TR/EN konsol temiz, ilk yükleme 159 ms, kaydırıcı tabloyu değiştiriyor, "Bilgi vermiyor" görünüyor. Çevrimdışı mod bu turda denenmedi (F4-3'te geçmişti). Klon scratchpad'de duruyor; silmek kullanıcı onayı ister | docs/reports/qa-F4-final.md |
 | COMMIT | orkestratör | 1ff143c: FIX-F3, FIX-F4A, FIX-F4W, F4W-2, ATTR-1b, DOC-ATTR, PF-MODEL, ORK düzeltmeleri, ADR-014 (62 dosya) | — |
 | PF-MODEL | doc-writer (Haiku 5.5) | PITCH_FACTS "Model sonuçları" #26–#41 eklendi; her satırda dosya yolu ve alan var. #27 (≥154 kV 61,0 km) orkestratör sayımıyla doğrulandı: `risk_2026-10-30.parquet → voltage_class`, ge154kv 60,99 km, etiketsiz 31,45 km. README'deki yanlış "ADR-007" atfı düzeltildi | handoff |

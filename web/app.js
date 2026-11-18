@@ -3,7 +3,8 @@
   "use strict";
 
   const params = new URLSearchParams(location.search);
-  const MOCK = params.get("mock") === "1";
+  // Static mode: bundled snapshot fixtures under web/mock/ instead of the live API (see detectStatic()).
+  let STATIC = params.get("mock") === "1";
   const TIERS = ["kritik", "yuksek", "orta", "dusuk"];
   const BASEMAP_STYLE_URL = "https://tiles.openfreemap.org/styles/positron"; // keyless; see docs/ATTRIBUTIONS.md
   const css = getComputedStyle(document.documentElement);
@@ -65,7 +66,7 @@
     lb.setAttribute("aria-label", t("lang_switch_label"));
     lb.lang = state.lang === "tr" ? "en" : "tr";
     $("drawer-close").textContent = "×";
-    $("src-badge").textContent = MOCK ? t("api_mock") : t("api_live");
+    $("src-badge").textContent = STATIC ? t("api_static") : t("api_live");
     document.title = t("app_title");
   }
 
@@ -83,7 +84,45 @@
     const p = new URLSearchParams();
     for (const k in q || {}) if (q[k] !== undefined && q[k] !== null && q[k] !== "") p.set(k, q[k]);
     const qs = p.toString();
-    return path + (qs ? "?" + qs : "");
+    return path.replace(/^\//, "") + (qs ? "?" + qs : ""); // relative: the app may run under a sub-path (/hatkalkani/)
+  }
+  /* Static mode when forced (?mock=1), served from github.io, served by a plain static server, or /api/health fails.
+     A HEAD request for the page itself tells known static servers apart without logging a failed API request. */
+  async function detectStatic() {
+    if (STATIC) return;
+    if (/\.github\.io$/i.test(location.hostname)) { STATIC = true; return; }
+    try {
+      const h = await fetch(location.pathname, { method: "HEAD" });
+      if (/SimpleHTTP|GitHub\.com/i.test(h.headers.get("server") || "")) { STATIC = true; return; }
+    } catch (e) { /* fall through to the health probe */ }
+    const ctl = new AbortController();
+    const to = setTimeout(() => ctl.abort(), 3000);
+    try {
+      const res = await fetch(apiUrl("/api/health"), { signal: ctl.signal });
+      const b = res.ok ? await res.json() : null;
+      if (!b || !b.status) STATIC = true;
+    } catch (e) { STATIC = true; } finally { clearTimeout(to); }
+  }
+  let scenarioIndex = null;
+  async function staticScenario(q) {
+    if (!scenarioIndex) scenarioIndex = await getJson("mock/scenario_index.json");
+    const file = scenarioIndex.dates[q.date];
+    if (!file) throw new ApiError(404, { detail_tr: "Bu gün statik demoda yok.", detail_en: "This day is not in the static demo." });
+    const doc = await getJson("mock/" + file);
+    const gust = q.gust_kmh === undefined || q.gust_kmh === null || q.gust_kmh === "" ? doc.default_inputs.gust_kmh : Number(q.gust_kmh);
+    const { gust_min: lo, gust_max: hi, gust_step: st } = scenarioIndex;
+    const snapped = Math.min(hi, Math.max(lo, lo + Math.round((gust - lo) / st) * st)); // nearest precomputed value
+    const tier = q.min_tier || doc.default_inputs.min_tier;
+    const c = doc.combos[snapped + "|" + tier];
+    if (!c) throw new ApiError(422, { detail_tr: "Bu birleşim statik demoda yok.", detail_en: "This combination is not in the static demo." });
+    const seg = await api("/api/segments", { as_of: c.inputs.as_of_used });
+    const features = c.idx.map((i) => {
+      const f = seg.features[i];
+      if (!f || f.properties.segment_id !== doc.ids[i]) throw new ApiError(500, { detail_tr: "Fikstür tutarsız.", detail_en: "Inconsistent fixture." });
+      return { type: "Feature", geometry: f.geometry, properties: Object.assign({}, f.properties, { gust_kmh: doc.gust_kmh[i], candidate: true }) };
+    });
+    return { date: doc.date, inputs: c.inputs, district_wide: c.district_wide, targeted: c.targeted, segments: { type: "FeatureCollection", features },
+      wind: doc.wind, sensitivity_segment_unit: c.sensitivity_segment_unit, note_tr: doc.note_tr, note_en: doc.note_en, _mock: true };
   }
   function mockFile(path, q) {
     const asof = (q && q.as_of) || state.currentAsOf || "2026-10-30";
@@ -96,7 +135,6 @@
     if ((m = path.match(/^\/api\/segments\/(.+)$/))) return { detail: m[1], asof };
     if (path === "/api/workorders") return "mock/workorders.json";
     if (path === "/api/scenario/dates") return "mock/scenario_dates.json";
-    if (path === "/api/scenario") return "mock/scenario.json";
     if (path === "/api/backtest") return "mock/backtest.json";
     if (path === "/api/backtest/events") return "mock/backtest_events.json";
     return null;
@@ -108,7 +146,8 @@
     return res.json();
   }
   async function api(path, q) {
-    if (!MOCK) return getJson(apiUrl(path, q));
+    if (!STATIC) return getJson(apiUrl(path, q));
+    if (path === "/api/scenario") return staticScenario(q || {});
     const f = mockFile(path, q);
     if (!f) throw new ApiError(404, { detail_tr: "Mock yok", detail_en: "No mock" });
     if (typeof f === "string") return getJson(f);
@@ -119,7 +158,7 @@
     return { type: "Feature", geometry: feat.geometry, properties: props };
   }
   function exportUrl(format) {
-    if (MOCK) return "mock/workorders." + format;
+    if (STATIC) return "mock/workorders." + format;
     return apiUrl("/api/workorders/export", { format });
   }
 
@@ -219,9 +258,9 @@
   }
 
   async function boot() {
+    await detectStatic();
     applyStaticI18n();
-    $("mockbar").hidden = !MOCK;
-    $("mock-mark").hidden = !MOCK;
+    $("mockbar").hidden = !STATIC;
     initMap();
     renderTierLegend();
     const results = await Promise.allSettled([
@@ -343,7 +382,10 @@
     }).join("");
   }
   function renderExports() {
-    [["csv", "exp-csv"], ["geojson", "exp-geojson"], ["gpkg", "exp-gpkg"]].forEach(([f, id]) => { $(id).href = exportUrl(f); });
+    [["csv", "exp-csv"], ["geojson", "exp-geojson"], ["gpkg", "exp-gpkg"]].forEach(([f, id]) => {
+      $(id).href = exportUrl(f);
+      if (STATIC) $(id).setAttribute("download", "hatkalkani_isemri_" + (state.currentAsOf || "snapshot") + "." + f);
+    });
   }
   $("wolist").addEventListener("click", (e) => { const b = e.target.closest(".wo"); if (b) selectSpan(state.workorders[Number(b.dataset.i)]); });
   $("wolist").addEventListener("keydown", (e) => {
@@ -462,6 +504,7 @@
     setStatus($("sc-status"), t("loading"));
     try {
       state.dates = await api("/api/scenario/dates");
+      if (STATIC && !scenarioIndex) scenarioIndex = await getJson("mock/scenario_index.json");
     } catch (err) { notReady($("sc-status"), err); state.scenarioErr = err; state.dates = null; return; }
     state.scenarioErr = null;
     $("sc-status").textContent = "";
@@ -474,12 +517,21 @@
     const maxAll = Math.max.apply(null, dates.map((d) => d.max_gust_kmh_grid || d.max_gust_kmh));
     const g = $("sc-gust");
     g.min = 0; g.max = Math.ceil(maxAll);
+    if (STATIC && scenarioIndex) { // the slider can only sit on precomputed thresholds
+      g.min = scenarioIndex.gust_min; g.max = scenarioIndex.gust_max; g.step = scenarioIndex.gust_step;
+    }
     $("sc-tier").innerHTML = TIERS.slice(0, 3).map((k) => '<option value="' + k + '">' + esc(tierName(k)) + "</option>").join("");
     $("sc-tier").value = "yuksek";
     const sel = dates.find((d) => d.selected) || dates[0];
     $("sc-date").value = sel.date;
     updateGustLabels();
     $("sc-form").hidden = false;
+    updateStaticNote();
+  }
+  function updateStaticNote() {
+    const n = $("sc-static-note");
+    n.hidden = !(STATIC && scenarioIndex);
+    if (!n.hidden) n.textContent = t("sc_static_note", { min: fmt(scenarioIndex.gust_min, 0), max: fmt(scenarioIndex.gust_max, 0), step: fmt(scenarioIndex.gust_step, 0) });
   }
   function selectedDate() { return (state.dates || []).find((d) => d.date === $("sc-date").value); }
   function updateGustLabels() { $("sc-gust-out").textContent = fmt($("sc-gust").value, 0); }
@@ -674,6 +726,7 @@
       $("sc-tier").innerHTML = TIERS.slice(0, 3).map((k) => '<option value="' + k + '">' + esc(tierName(k)) + "</option>").join("");
       $("sc-tier").value = v;
       updateGustLabels();
+      updateStaticNote();
     }
     renderScenario();
     renderValidation();

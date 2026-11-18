@@ -181,3 +181,12 @@ Sonuçlar / ödünleşimler: …
 - **Backtest:** 2025 sezonu bilgi vermiyor. Hatta 500 m içinde 2 olay var; karar için en az 38 olay gerekir (`backtest.json → verdict`). Sonuç olduğu gibi raporlanır; modeli ne doğrular ne çürütür.
 - **Seçilmeyen seçenek:** 2020–2024 çok yıllı backtest şimdi eklenmedi. Sızıntısız bir çok yıllı test as_of ≥ 2020-03 ister, çünkü CHM görüntüleri 2020-02-18'e kadar uzanıyor (ADR-008).
 - **Sonuç:** F3 kapanır. Ağırlık ve eşikler config'te parametre olarak kalır; saha görüşmeleri ve EDAŞ hat verisiyle yeniden değerlendirilecek.
+
+## ADR-015 — Portföy yayını: herkese açık GitHub deposu  (2026-11-18, kullanıcı)
+- **Bağlam:** Kullanıcı projeyi portföyünde göstermek için GitHub'a koymak istedi. Yayın öncesi taramada geçmişte anahtar bulunmadı; kişisel e-posta tüm commit'lerin yazar alanında ve `ingest/common.py`'deki HTTP User-Agent'ta vardı.
+- **Kararlar (kullanıcı):**
+  1. Geçmiş yeniden yazılır: yazar e-postası GitHub noreply adresine, dosyalardaki adres proje bağlantısına çevrilir. Commit sırası ve tarihleri korunur.
+  2. Kod MIT lisanslıdır. Veri çıktıları kaynak lisanslarına tabi kalır (OSM ve Overture türevleri ODbL; ayrıntı `docs/ATTRIBUTIONS.md`).
+  3. README yarışma sonucunu anmaz; "COP31 İklim Teknolojileri Creathonu için geliştirildi" der.
+  4. GitHub Pages'te statik demo yayımlanır: 31 Ekim 2026 çıktılarının anlık görüntüsü, sunucusuz.
+- **Sonuç:** Depo `muhammeteminayhan/hatkalkani` (public). Bu tarihten önceki STATUS kayıtlarındaki commit kimlikleri yeniden yazım öncesine aittir.

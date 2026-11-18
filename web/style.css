@@ -6,7 +6,7 @@
   font-size:18px;
 }
 *{box-sizing:border-box}
-html,body{height:100%;margin:0}
+html,body{height:100%;margin:0;overflow:hidden}
 body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;color:var(--ink);background:var(--bg2);display:flex;flex-direction:column;line-height:1.35}
 h1,h2,h3,p,ul,ol,dl,dd{margin:0}
 :focus-visible{outline:4px solid var(--focus);outline-offset:2px}
@@ -142,7 +142,6 @@ h1,h2,h3,p,ul,ol,dl,dd{margin:0}
 .sens-h{background:#eef1f4;border:2px dashed var(--ink2);padding:.4rem .5rem;font-size:.95rem}
 .card.case{margin-bottom:.6rem}
 
-.mock-mark{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12rem;font-weight:900;letter-spacing:.3em;color:rgba(138,75,0,.16);transform:rotate(-18deg);pointer-events:none;z-index:1}
 .cmp-table{width:100%;border-collapse:collapse;margin:.4rem 0;font-size:.9rem}
 .cmp-table th,.cmp-table td{border:1px solid var(--line);padding:.35rem .4rem;vertical-align:top}
 .cmp-table thead th{font-size:.82rem;text-align:left;background:var(--bg2)}

@@ -6,7 +6,7 @@ window.I18N = {
     skip: "Haritaya geç",
     lang_switch: "English",
     lang_switch_label: "Switch to English",
-    mock_banner: "MOCK: sayılar canlı API değil, kaydedilmiş bir API yanıtından gelir; senaryo yalnız varsayılan girdiyi gösterir.",
+    static_banner: "Statik demo — 31 Ekim 2026 çıktılarının anlık görüntüsü. Canlı hesap için yerel kurulum: README.",
     kpi_line_km: "Hat uzunluğu (km)",
     kpi_critical: "Kritik parça",
     kpi_workorders: "Öncelikli açıklık",
@@ -90,6 +90,7 @@ window.I18N = {
     sc_proxy: "Vekil ölçüm: bina sayısı, hatlara yakın bina sayımından türetilir; gerçek abone sayısı değildir.",
     sc_on_map: "Hedeflenen hatlar haritada mavi halka ile vurgulanır.",
     sc_note: "Not",
+    sc_static_note: "Statik demoda eşik yalnızca önceden hesaplanmış değerlere oturur ({min}–{max} km/sa, {step} km/sa aralıkla); ara değerler en yakın hazır değere yuvarlanır.",
     sc_asof_used: "{d} verisiyle hesaplanan risk.",
     sc_sens_title: "Aday parça birimi (alt sınır)",
     sc_sens_note: "Gerçek kesinti birimi EDAŞ fider/ayırıcı verisi gerektirir.",
@@ -145,7 +146,7 @@ window.I18N = {
     selected_hint: "Seçili parça",
     served_by: "Veri kaynağı",
     api_live: "Canlı API",
-    api_mock: "Mock fikstür"
+    api_static: "Statik anlık görüntü"
   },
   en: {
     app_title: "HatKalkanı",
@@ -153,7 +154,7 @@ window.I18N = {
     skip: "Skip to map",
     lang_switch: "Türkçe",
     lang_switch_label: "Türkçe'ye geç",
-    mock_banner: "MOCK: numbers come from a recorded API response, not the live API; the scenario only shows its default input.",
+    static_banner: "Static demo — snapshot of the 31 October 2026 outputs. For live computation, install locally: see README.",
     kpi_line_km: "Line length (km)",
     kpi_critical: "Critical segments",
     kpi_workorders: "Priority spans",
@@ -237,6 +238,7 @@ window.I18N = {
     sc_proxy: "Proxy measure: the building count is derived from buildings near the lines; it is not a customer count.",
     sc_on_map: "Targeted lines are highlighted on the map with a blue halo.",
     sc_note: "Note",
+    sc_static_note: "In the static demo the threshold snaps to precomputed values only ({min}–{max} km/h in steps of {step} km/h); in-between values round to the nearest one.",
     sc_asof_used: "Risk computed with {d} data.",
     sc_sens_title: "Candidate-segment unit (lower bound)",
     sc_sens_note: "The real outage unit requires the utility's feeder/switch data.",
@@ -292,6 +294,6 @@ window.I18N = {
     selected_hint: "Selected segment",
     served_by: "Data source",
     api_live: "Live API",
-    api_mock: "Mock fixture"
+    api_static: "Static snapshot"
   }
 };

@@ -1,0 +1,1 @@
+{"_mock":true,"gust_min":30,"gust_max":90,"gust_step":5,"min_tiers":["kritik","yuksek","orta"],"dates":{"2025-06-27":"scenario_2025-06-27.json","2025-06-28":"scenario_2025-06-28.json","2025-06-29":"scenario_2025-06-29.json","2025-06-30":"scenario_2025-06-30.json"}}

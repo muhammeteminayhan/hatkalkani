@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -15,7 +16,16 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_COLUMNS = ["kaynak", "url", "yerel_yol", "bayt", "sha256", "tarih", "lisans"]
-USER_AGENT = "HatKalkani/0.1 (research prototype; contact: github.com/muhammeteminayhan/hatkalkani)"
+_BASE_USER_AGENT = "HatKalkani/0.1 (+https://github.com/muhammeteminayhan/hatkalkani)"
+
+
+def build_user_agent() -> str:
+    """Return the HTTP User-Agent; append HATKALKANI_CONTACT when set."""
+    contact = os.environ.get("HATKALKANI_CONTACT", "").strip()
+    return f"{_BASE_USER_AGENT}; {contact}" if contact else _BASE_USER_AGENT
+
+
+USER_AGENT = build_user_agent()
 OVERPASS_ENDPOINTS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
